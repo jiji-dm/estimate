@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>現調レポート</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="header-left">
+      <div class="header-icon">🔍</div>
+      <div>
+        <h1>現調レポート</h1>
+        <p>SITE SURVEY REPORT</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tabInput" onclick="switchTab('input')">✏️ 入力</button>
+    <button class="tab-btn"        id="tabList"  onclick="switchTab('list')">📋 保存済み <span id="savedCount"></span></button>
+  </div>
+
+  <!-- ══ 入力タブ ══ -->
+  <div id="inputTab">
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-info">
+        <span class="progress-label">SURVEY INPUT</span>
+        <span class="progress-num" id="progressNum">01 / 14</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    </div>
+
+    <div id="stepsContainer">
+
+      <!-- Step 1: 現場名 -->
+      <div class="step active" data-step="1">
+        <div class="step-q">現場名を入力してください</div>
+        <input type="text" class="text-input" id="siteName" placeholder="例）新宿センタービル B1F" style="margin-bottom:22px;">
+        <button class="next-btn" onclick="nextStep()">次へ →</button>
+      </div>
+
+      <!-- Step 2: 工事内容（最初に聞く） -->
+      <div class="step" data-step="2">
+        <div class="step-q">工事内容は？</div>
+        <div class="btn-grid">
+          <button class="choice-btn" onclick="pickKojiType(this,'設置')"><span class="icon">🔧</span>設置</button>
+          <button class="choice-btn" onclick="pickKojiType(this,'撤去')"><span class="icon">🗑️</span>撤去</button>
+          <button class="choice-btn" onclick="pickKojiType(this,'仮設')">
+            <span class="icon">🔄</span>仮設<small class="sub">設置＆撤去セット</small>
+          </button>
+        </div>
+        <button class="next-btn" id="next2" onclick="nextStep()" disabled>次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 3: 作業日（工事種別に連動） -->
+      <div class="step" data-step="3">
+        <div class="step-q" id="step3Title">作業日はいつですか？</div>
+
+        <!-- 設置・撤去：作業日1つ -->
+        <div id="dateBlock_single">
+          <div id="dateSection_single"></div>
+        </div>
+
+        <!-- 仮設：設置日＋撤去日 -->
+        <div id="dateBlock_kasetsu" style="display:none;">
+          <!-- 設置日 -->
+          <div class="date-section-header install">
+            <div class="date-section-icon">🔧</div>
+            <div>
+              <div class="date-section-title">設置日</div>
+              <div class="date-section-sub">機材を設置する日</div>
+            </div>
+          </div>
+          <div id="dateSection_install"></div>
+
+          <div class="date-divider"><div class="date-divider-label">REMOVAL DATE</div></div>
+
+          <!-- 撤去日 -->
+          <div class="date-section-header remove">
+            <div class="date-section-icon">🗑️</div>
+            <div>
+              <div class="date-section-title">撤去日</div>
+              <div class="date-section-sub">機材を撤去する日</div>
+            </div>
+          </div>
+          <div id="dateSection_remove"></div>
+        </div>
+
+        <button class="next-btn" onclick="nextStep()">次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 4: 時間帯 -->
+      <div class="step" data-step="4">
+        <div class="step-q">作業時間帯は？</div>
+        <div class="btn-grid col2">
+          <button class="choice-btn" onclick="pick(this,'timeZone','日中')"><span class="icon">☀️</span>日中</button>
+          <button class="choice-btn" onclick="pick(this,'timeZone','夜間')"><span class="icon">🌙</span>夜間</button>
+        </div>
+        <button class="next-btn" id="next4" onclick="nextStep()" disabled>次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 5: 環境 -->
+      <div class="step" data-step="5">
+        <div class="step-q">工事場所の環境は？</div>
+        <div class="btn-grid col2">
+          <button class="choice-btn" onclick="pickLocation(this,'屋内')"><span class="icon">🏠</span>屋内</button>
+          <button class="choice-btn" onclick="pickLocation(this,'屋外')"><span class="icon">🌤️</span>屋外</button>
+        </div>
+        <!-- 屋外派生：ポール新設 -->
+        <div id="poleSection" style="display:none;">
+          <div class="field-section" style="margin-top:4px;">
+            <div class="field-section-label">🏗️ ポール新設</div>
+            <div class="btn-grid col2" style="margin-bottom:0;">
+              <button class="choice-btn" onclick="pickPole(this,'あり')"><span class="icon">✅</span>あり</button>
+              <button class="choice-btn" onclick="pickPole(this,'なし')"><span class="icon">🚫</span>なし</button>
+            </div>
+            <!-- 掘削 -->
+            <div id="excavationSection" style="display:none;margin-top:12px;">
+              <div class="field-section-label" style="margin-top:4px;">⛏️ 掘削するもの</div>
+              <div class="btn-grid col3" style="margin-bottom:0;">
+                <button class="choice-btn" onclick="pick(this,'excavation','土')"><span class="icon">🌱</span>土</button>
+                <button class="choice-btn" onclick="pick(this,'excavation','アスファルト')"><span class="icon">🛣️</span>アスファルト</button>
+                <button class="choice-btn" onclick="pick(this,'excavation','コンクリ')"><span class="icon">🧱</span>コンクリ</button>
+              </div>
+              <!-- 仕上げ -->
+              <div id="finishSection" style="display:none;margin-top:12px;">
+                <div class="field-section-label" style="margin-top:4px;">🪣 埋設後の仕上げ</div>
+                <div class="btn-grid col2" style="margin-bottom:0;">
+                  <button class="choice-btn" onclick="pick(this,'poleFinish','アスファルト仕上げ')"><span class="icon">🛣️</span>アスファルト</button>
+                  <button class="choice-btn" onclick="pick(this,'poleFinish','左官仕上げ')"><span class="icon">🪣</span>左官仕上げ</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="next-btn" id="next5" onclick="nextStep()" disabled>次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 5.5: エリア選択（Step6として番号付け） -->
+      <div class="step" data-step="6">
+        <div class="step-q">現場のエリアは？</div>
+        <div class="btn-grid col3">
+          <button class="choice-btn" onclick="pickArea(this,'都内')"><span class="icon">🗼</span>都内</button>
+          <button class="choice-btn" onclick="pickArea(this,'関東')"><span class="icon">🗾</span>関東</button>
+          <button class="choice-btn" onclick="pickArea(this,'東北')"><span class="icon">⛄</span>東北</button>
+          <button class="choice-btn" onclick="pickArea(this,'関西')"><span class="icon">🏯</span>関西</button>
+          <button class="choice-btn" onclick="pickArea(this,'九州')"><span class="icon">🌋</span>九州</button>
+          <button class="choice-btn" onclick="pickArea(this,'北海道')"><span class="icon">🦀</span>北海道</button>
+        </div>
+        <!-- エリア詳細 -->
+        <div id="areaDetailSection" style="display:none;">
+          <textarea class="text-input" id="areaDetail" rows="1" placeholder="例）渋谷区、横浜市など（任意）"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;" id="areaDetailToggle" style="display:none;">
+          <button class="toggle-btn" id="areaDetailYes" onclick="toggleAreaDetail('yes')">📝 詳細を記入</button>
+          <button class="toggle-btn" id="areaDetailNo"  onclick="toggleAreaDetail('no')">⏭️ スキップ</button>
+        </div>
+        <button class="next-btn" id="next6" onclick="nextStep()" disabled>次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 7: 施工箇所（旧Step6） -->
+      <div class="step" data-step="7">
+        <div class="step-q">施工箇所を入力してください</div>
+        <textarea class="text-input" id="sekouSho" rows="2" placeholder="例）B1F 駐車場エントランス付近"></textarea>
+        <button class="next-btn" onclick="nextStep()">次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 8: システム台数＋カメラ種類・台数（統合） -->
+      <div class="step" data-step="8">
+        <div class="step-q">システム・機器の設定</div>
+
+        <!-- システム台数 -->
+        <div class="field-section">
+          <div class="field-section-label">🖥 システム台数</div>
+          <div class="inline-count-ctrl">
+            <button class="cnt-btn" onclick="sysCountChange(-1)">−</button>
+            <div class="cnt-val" id="sysCountVal">1</div>
+            <button class="cnt-btn" onclick="sysCountChange(1)">＋</button>
+          </div>
+          <div class="sys-limit-note" id="sysLimitNote">最大 <span id="sysMaxCam">3</span> 台まで接続可能</div>
+        </div>
+
+        <!-- カメラ種類＋台数 -->
+        <div class="field-section" style="margin-top:18px;">
+          <div class="field-section-label">📷 機器の種類と台数 <span style="font-size:11px;font-weight:400;color:var(--text-dim);">複数選択可</span></div>
+          <div class="device-list" id="deviceList"></div>
+          <div id="camTotalRow" class="cam-total-row" style="display:none;">
+            合計 <span id="camTotalVal" class="cam-total-num">0</span> 台
+            <span id="camTotalStatus" class="cam-total-status"></span>
+          </div>
+        </div>
+
+        <textarea class="text-input" id="cameraTypeOther" rows="1" placeholder="その他・詳細（任意）" style="margin-top:4px;"></textarea>
+        <div id="sysErrorMsg" class="error-msg" style="display:none;"></div>
+        <button class="next-btn" id="next8" onclick="tryNextStep8()" disabled>次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 9: 電源供給 -->
+      <div class="step" data-step="9">
+        <div class="step-q">電源供給の設定</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">システム <span id="powerSysTotalLabel">0</span> 台 ／ グループにまとめて入力できます</div>
+
+        <!-- ステータスバー -->
+        <div class="arm-status-bar" id="powerStatusBar">
+          <div class="arm-status-inner">
+            <span class="arm-status-label">割り当て済み</span>
+            <span id="powerAssignedNum" class="arm-status-num">0</span>
+            <span class="arm-status-sep">/</span>
+            <span id="powerTotalNum" class="arm-status-num accent">0</span>
+            <span class="arm-status-label">台</span>
+            <span id="powerStatusBadge" class="arm-status-badge"></span>
+          </div>
+        </div>
+
+        <div id="powerGroupList"></div>
+        <button class="add-group-btn" onclick="addPowerGroup()">＋ グループを追加</button>
+
+        <!-- ★ 修正: id を next11 から next9step に統一（HTML側を next9step に変更し、JS側も合わせる） -->
+        <button class="next-btn" id="next9step" onclick="nextStep()" disabled>次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 10: アーム（旧Step9） -->
+      <div class="step" data-step="10">
+        <div class="step-q">カメラアームの設定<br><small style="font-size:13px;color:var(--text-dim);font-family:'Noto Sans JP';">合計台数はカメラ台数と一致させてください</small></div>
+
+        <!-- 合計ステータスバー -->
+        <div class="arm-status-bar" id="armStatusBar">
+          <div class="arm-status-inner">
+            <span class="arm-status-label">アーム合計</span>
+            <span id="armAssignedNum" class="arm-status-num">0</span>
+            <span class="arm-status-sep">/</span>
+            <span id="armTotalNum" class="arm-status-num accent">0</span>
+            <span class="arm-status-label">台</span>
+            <span id="armStatusBadge" class="arm-status-badge"></span>
+          </div>
+        </div>
+
+        <div class="arm-section" id="armSection">
+
+          <!-- 壁付けアーム -->
+          <div class="arm-type-card" id="armCard_wall">
+            <div class="arm-type-header" onclick="toggleArm('wall')">
+              <div class="arm-type-name"><span>🔩</span> 壁付けアーム</div>
+              <div class="arm-check" id="armCheck_wall"></div>
+            </div>
+            <div class="arm-sub-section" id="armSub_wall">
+              <div class="arm-sub-label">取付方法と台数（複数組み合わせ可）</div>
+              <div class="arm-methods-list" id="armMethods_wall">
+                <div class="arm-method-row" data-arm="wall" data-method="マグネット">
+                  <div class="arm-method-label">🧲 マグネット</div>
+                  <div class="arm-method-ctrl" onclick="event.stopPropagation()">
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('wall','マグネット',-1)">−</button>
+                    <div class="arm-method-cnt" id="armMC_wall_マグネット">0</div>
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('wall','マグネット',1)">＋</button>
+                  </div>
+                </div>
+                <div class="arm-method-row" data-arm="wall" data-method="ビス留">
+                  <div class="arm-method-label">🔩 ビス留</div>
+                  <div class="arm-method-ctrl" onclick="event.stopPropagation()">
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('wall','ビス留',-1)">−</button>
+                    <div class="arm-method-cnt" id="armMC_wall_ビス留">0</div>
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('wall','ビス留',1)">＋</button>
+                  </div>
+                </div>
+                <div class="arm-method-row" data-arm="wall" data-method="ボックス">
+                  <div class="arm-method-label">📦 ボックス</div>
+                  <div class="arm-method-ctrl" onclick="event.stopPropagation()">
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('wall','ボックス',-1)">−</button>
+                    <div class="arm-method-cnt" id="armMC_wall_ボックス">0</div>
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('wall','ボックス',1)">＋</button>
+                  </div>
+                </div>
+                <div class="arm-method-row" data-arm="wall" data-method="加工必要">
+                  <div class="arm-method-label">🔨 加工必要</div>
+                  <div class="arm-method-ctrl" onclick="event.stopPropagation()">
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('wall','加工必要',-1)">−</button>
+                    <div class="arm-method-cnt" id="armMC_wall_加工必要">0</div>
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('wall','加工必要',1)">＋</button>
+                  </div>
+                </div>
+              </div>
+              <div class="arm-sub-total">壁付け 合計: <span id="armSubTotal_wall">0</span> 台</div>
+            </div>
+          </div>
+
+          <!-- ポールマウント -->
+          <div class="arm-type-card" id="armCard_pole">
+            <div class="arm-type-header" onclick="toggleArm('pole')">
+              <div class="arm-type-name"><span>🏗️</span> ポールマウント</div>
+              <div class="arm-check" id="armCheck_pole"></div>
+            </div>
+            <div class="arm-sub-section" id="armSub_pole">
+              <div class="arm-sub-label">台数</div>
+              <div class="camera-count-ctrl" onclick="event.stopPropagation()">
+                <button class="cnt-btn" id="armMinus_pole" onclick="armCntChange('pole',-1)">−</button>
+                <div class="cnt-val" id="armCnt_pole">0</div>
+                <button class="cnt-btn" id="armPlus_pole" onclick="armCntChange('pole',1)">＋</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 天井吊り下げ -->
+          <div class="arm-type-card" id="armCard_ceil">
+            <div class="arm-type-header" onclick="toggleArm('ceil')">
+              <div class="arm-type-name"><span>⬆️</span> 天井吊り下げ</div>
+              <div class="arm-check" id="armCheck_ceil"></div>
+            </div>
+            <div class="arm-sub-section" id="armSub_ceil">
+              <div class="arm-sub-label">取付方法と台数（複数組み合わせ可）</div>
+              <div class="arm-methods-list" id="armMethods_ceil">
+                <div class="arm-method-row" data-arm="ceil" data-method="全ねじ">
+                  <div class="arm-method-label">🔗 全ねじ</div>
+                  <div class="arm-method-ctrl" onclick="event.stopPropagation()">
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('ceil','全ねじ',-1)">−</button>
+                    <div class="arm-method-cnt" id="armMC_ceil_全ねじ">0</div>
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('ceil','全ねじ',1)">＋</button>
+                  </div>
+                </div>
+                <div class="arm-method-row" data-arm="ceil" data-method="マグネット">
+                  <div class="arm-method-label">🧲 マグネット</div>
+                  <div class="arm-method-ctrl" onclick="event.stopPropagation()">
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('ceil','マグネット',-1)">−</button>
+                    <div class="arm-method-cnt" id="armMC_ceil_マグネット">0</div>
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('ceil','マグネット',1)">＋</button>
+                  </div>
+                </div>
+                <div class="arm-method-row" data-arm="ceil" data-method="ビス留">
+                  <div class="arm-method-label">🔩 ビス留</div>
+                  <div class="arm-method-ctrl" onclick="event.stopPropagation()">
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('ceil','ビス留',-1)">−</button>
+                    <div class="arm-method-cnt" id="armMC_ceil_ビス留">0</div>
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('ceil','ビス留',1)">＋</button>
+                  </div>
+                </div>
+                <div class="arm-method-row" data-arm="ceil" data-method="ボックス">
+                  <div class="arm-method-label">📦 ボックス</div>
+                  <div class="arm-method-ctrl" onclick="event.stopPropagation()">
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('ceil','ボックス',-1)">−</button>
+                    <div class="arm-method-cnt" id="armMC_ceil_ボックス">0</div>
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('ceil','ボックス',1)">＋</button>
+                  </div>
+                </div>
+                <div class="arm-method-row" data-arm="ceil" data-method="加工必要">
+                  <div class="arm-method-label">🔨 加工必要</div>
+                  <div class="arm-method-ctrl" onclick="event.stopPropagation()">
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('ceil','加工必要',-1)">−</button>
+                    <div class="arm-method-cnt" id="armMC_ceil_加工必要">0</div>
+                    <button class="cnt-btn sm" onclick="armMethodCntChange('ceil','加工必要',1)">＋</button>
+                  </div>
+                </div>
+              </div>
+              <div class="arm-sub-total">天井 合計: <span id="armSubTotal_ceil">0</span> 台</div>
+            </div>
+          </div>
+
+          <!-- アームなし -->
+          <div class="arm-type-card" id="armCard_none">
+            <div class="arm-type-header" onclick="toggleArm('none')">
+              <div class="arm-type-name"><span>🚫</span> アームなし</div>
+              <div class="arm-check" id="armCheck_none"></div>
+            </div>
+            <div class="arm-sub-section" id="armSub_none">
+              <div class="arm-sub-label">台数（カメラ残数から自動計算）</div>
+              <div class="camera-count-ctrl" onclick="event.stopPropagation()">
+                <button class="cnt-btn" id="armMinus_none" onclick="armCntChange('none',-1)">−</button>
+                <div class="cnt-val" id="armCnt_none">0</div>
+                <button class="cnt-btn" id="armPlus_none" onclick="armCntChange('none',1)">＋</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="next-btn" id="next10" onclick="nextStep()" disabled>次へ →</button>
+        <button class="back-btn" onclick="goBackFrom10()">← 戻る</button>
+      </div>
+
+      <!-- Step 11: 配線方法 -->
+      <div class="step" data-step="11">
+        <div class="step-q">配線方法は？</div>
+        <div class="btn-grid col3">
+          <button class="choice-btn" onclick="pick(this,'wiring','露出')"><span class="icon">〰️</span>露出</button>
+          <button class="choice-btn" onclick="pick(this,'wiring','配管')"><span class="icon">🔲</span>配管</button>
+          <button class="choice-btn" onclick="pick(this,'wiring','天井内')"><span class="icon">🏗️</span>天井内</button>
+        </div>
+        <button class="next-btn" id="next11" onclick="nextStep()" disabled>次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 12: 作業人数・日数・時間（仮設は設置・撤去別） -->
+      <div class="step" data-step="12">
+        <div class="step-q" id="step11Title">作業計画</div>
+
+        <!-- 設置・撤去（単独） -->
+        <div id="workBlock_single">
+          <div id="workSection_single"></div>
+        </div>
+
+        <!-- 仮設：設置＋撤去 -->
+        <div id="workBlock_kasetsu" style="display:none;">
+          <div class="date-section-header install" style="margin-bottom:12px;">
+            <div class="date-section-icon">🔧</div>
+            <div><div class="date-section-title">設置</div></div>
+          </div>
+          <div id="workSection_install"></div>
+          <div class="date-divider" style="margin:18px 0;"><div class="date-divider-label">REMOVAL</div></div>
+          <div class="date-section-header remove" style="margin-bottom:12px;">
+            <div class="date-section-icon">🗑️</div>
+            <div><div class="date-section-title">撤去</div></div>
+          </div>
+          <div id="workSection_remove"></div>
+        </div>
+
+        <button class="next-btn" onclick="nextStep()">次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 13: LANケーブル -->
+      <div class="step" data-step="13">
+        <div class="step-q">LANケーブルと配線支持材</div>
+        <div class="field-label">LANケーブル長さ（m）</div>
+        <div class="inline-count-ctrl" style="margin-bottom:20px;">
+          <button class="cnt-btn" onclick="lanCntChange(-5)">−</button>
+          <div style="display:flex;align-items:baseline;gap:4px;">
+            <div class="cnt-val" id="lanLengthVal" style="font-size:28px;min-width:52px;">10</div>
+            <span style="font-size:13px;color:var(--text-dim);">m</span>
+          </div>
+          <button class="cnt-btn" onclick="lanCntChange(5)">＋</button>
+        </div>
+        <input type="hidden" id="lanLength" value="10">
+        <div class="field-label">配線支持材</div>
+        <textarea class="text-input" id="wireSupport" rows="1" placeholder="例）モール、インシュロック、ステープル等"></textarea>
+        <button class="next-btn" onclick="nextStep()">次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 14: 高所作業 -->
+      <div class="step" data-step="14">
+        <div class="step-q">高所作業はありますか？</div>
+        <div class="toggle-row">
+          <button class="toggle-btn" id="kosoNone" onclick="toggleKoso('none')">🚶 なし</button>
+          <button class="toggle-btn" id="kosoYes"  onclick="toggleKoso('yes')">🪜 あり</button>
+        </div>
+        <div id="kosoDetail" style="display:none;">
+
+          <!-- 機材種別（複数選択可） -->
+          <div class="field-section" style="margin-bottom:12px;">
+            <div class="field-section-label">🏗️ 使用機材 <span style="font-size:11px;font-weight:400;color:var(--text-dim);">複数選択可</span></div>
+            <div class="btn-grid col2" style="margin-bottom:0;">
+              <button class="choice-btn multi" onclick="kosoEquipPick(this,'脚立')">
+                <span class="icon">🪜</span>脚立<small class="sub">作業高さ3.5m未満</small>
+              </button>
+              <button class="choice-btn multi" onclick="kosoEquipPick(this,'はしご')">
+                <span class="icon">🔝</span>はしご
+              </button>
+              <button class="choice-btn multi" onclick="kosoEquipPick(this,'高所作業車')">
+                <span class="icon">🚛</span>高所作業車<small class="sub">10m未満</small>
+              </button>
+              <button class="choice-btn multi" onclick="kosoEquipPick(this,'バケット車')">
+                <span class="icon">🚜</span>バケット車
+              </button>
+            </div>
+          </div>
+
+          <!-- 準備方法（機材選択後に表示） -->
+          <div class="field-section" id="kosoSupplySection" style="display:none;margin-bottom:12px;">
+            <div class="field-section-label" id="kosoSupplyLabel">📦 準備方法</div>
+            <div class="btn-grid col3" style="margin-bottom:0;">
+              <button class="choice-btn" onclick="pick(this,'kosoSupply','準備')"><span class="icon">✅</span>準備</button>
+              <button class="choice-btn" onclick="pick(this,'kosoSupply','リース')"><span class="icon">🔑</span>リース</button>
+              <button class="choice-btn" onclick="pick(this,'kosoSupply','現地貸し出し')"><span class="icon">🏠</span>現地貸し出し</button>
+            </div>
+          </div>
+
+        </div>
+        <div style="height:16px;"></div>
+        <button class="next-btn" id="next13" onclick="nextStep()" disabled>次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 15: 廃材処理（撤去・仮設のみ表示） -->
+      <div class="step" data-step="15">
+        <div class="step-q">廃材の処理はどうしますか？</div>
+        <div class="btn-grid" id="haizaiGrid">
+          <button class="choice-btn" onclick="pick(this,'haizai','引き取り（バカン）')"><span class="icon">🚛</span>引き取り<small class="sub">バカンが回収</small></button>
+          <button class="choice-btn" onclick="pick(this,'haizai','施工会社が処分')"><span class="icon">🏗️</span>施工会社が処分</button>
+          <button class="choice-btn" onclick="pick(this,'haizai','現地残置')"><span class="icon">📦</span>現地残置</button>
+          <button class="choice-btn" onclick="pick(this,'haizai','未定')"><span class="icon">❓</span>未定</button>
+        </div>
+        <textarea class="text-input" id="haizaiNote" rows="1" placeholder="備考（任意）" style="margin-top:4px;"></textarea>
+        <button class="next-btn" id="next15" onclick="nextStep()" disabled>次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 16: アーム手配 -->
+      <div class="step" data-step="16">
+        <div class="step-q">アームの手配はどうしますか？</div>
+        <div class="btn-grid col3">
+          <button class="choice-btn" onclick="pick(this,'armHandling','バカン')"><span class="icon">🏢</span>バカン</button>
+          <button class="choice-btn" onclick="pick(this,'armHandling','施工会社')"><span class="icon">🔧</span>施工会社</button>
+          <button class="choice-btn" onclick="pick(this,'armHandling','未定')"><span class="icon">❓</span>未定</button>
+        </div>
+        <button class="next-btn" id="next16" onclick="nextStep()" disabled>次へ →</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+
+      <!-- Step 17: 特別条件 -->
+      <div class="step" data-step="17">
+        <div class="step-q">その他特別条件はありますか？</div>
+        <div class="toggle-row">
+          <button class="toggle-btn" id="tokNone" onclick="toggleToku('none')">✅ なし</button>
+          <button class="toggle-btn" id="tokYes"  onclick="toggleToku('yes')">📝 あり</button>
+        </div>
+        <div id="tokuDetail" style="display:none;">
+          <textarea class="text-input" id="tokuText" rows="3" placeholder="例）電源工事が別途必要、養生必須、入館証要など"></textarea>
+        </div>
+        <div style="height:16px;"></div>
+        <button class="next-btn" id="next17" onclick="generateReport()" disabled>レポートを生成 ✨</button>
+        <button class="back-btn" onclick="prevStep()">← 戻る</button>
+      </div>
+    </div>
+
+    <!-- 結果パネル -->
+    <div class="result-panel" id="resultPanel">
+      <div class="result-head">
+        <div class="result-badge">✅ 現調レポート完成</div>
+        <h2 id="resultTitle">現調レポート</h2>
+        <p>コピー・保存・ファイル書き出しができます</p>
+      </div>
+      <div class="result-box" id="resultBox"></div>
+      <div class="action-row">
+        <button class="act-btn primary" onclick="copyReport()">📋 コピー</button>
+        <button class="act-btn" onclick="saveReport()">💾 アプリ内保存</button>
+      </div>
+      <button class="act-btn" style="width:100%;margin-bottom:10px;" onclick="downloadSingle()">⬇️ このレポートをファイルに書き出す</button>
+      <!-- 概算見積セクション -->
+      <div class="estimate-section" id="estimateSection" style="display:none;">
+        <div class="estimate-section-title">💰 概算見積（施工費のみ・機器代金別途）</div>
+        <div id="estimateRows"></div>
+        <div class="estimate-total-row">
+          <span class="estimate-total-label">最終概算合計（税抜）</span>
+          <span class="estimate-total-val" id="estimateTotalVal"></span>
+        </div>
+        <div class="estimate-range" id="estimateRangeNote" style="display:none;"></div>
+        <div class="estimate-note">※施工費のみの概算です。実際の費用は現場状況により変動します。</div>
+      </div>
+      <button class="act-btn" id="downloadEstimateBtn" onclick="downloadEstimate()" style="width:100%;margin-bottom:10px;display:none;">⬇️ 概算見積をファイルに書き出す</button>
+      <button class="reset-btn" onclick="resetAll()">🔄 新しい現調を入力</button>
+    </div>
+  </div>
+
+  <!-- ══ 保存一覧タブ ══ -->
+  <div id="listTab" class="list-panel">
+    <div class="list-toolbar">
+      <div style="font-family:'Syne',sans-serif;font-size:12px;color:var(--text-dim);letter-spacing:0.08em;" id="listCountLabel"></div>
+      <div class="list-toolbar-btns">
+        <button class="export-btn" onclick="exportAll()">⬇️ 全件書き出し</button>
+        <button class="delete-all-btn" onclick="confirmDeleteAll()">🗑️ 全件削除</button>
+      </div>
+    </div>
+    <div id="listContent"></div>
+  </div>
+
+</div>
+
+<!-- モーダル -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-drag"></div>
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-body"  id="modalBody"></div>
+    <div class="modal-actions">
+      <button class="modal-act accent" onclick="copyModalReport()">📋 コピー</button>
+      <button class="modal-act"        onclick="downloadModal()">⬇️ ファイル書き出し</button>
+    </div>
+    <button class="modal-close" onclick="closeModal()">閉じる</button>
+  </div>
+</div>
+
+<!-- 確認ダイアログ -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <div class="confirm-icon" id="confirmIcon">🗑️</div>
+    <div class="confirm-title" id="confirmTitle"></div>
+    <div class="confirm-msg" id="confirmMsg"></div>
+    <div class="confirm-actions">
+      <button class="confirm-btn cancel" onclick="closeConfirm()">キャンセル</button>
+      <button class="confirm-btn danger" id="confirmOkBtn">削除する</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+
+<script src="app.js"></script>
+<script src="estimate.js"></script>
+</body>
+</html>
