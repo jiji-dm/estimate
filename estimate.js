@@ -49,10 +49,10 @@ function calcEstimate(r) {
   const powerGroups = r.powerGroups || [];
   powerGroups.forEach(function(g) {
     if (g.power === 'no') {
-      // 条件A：電気新設
-      const pMin = 75000, pMax = 115000;
-      lines.push({ label: `電源新設工事費（グループ: ${g.name || ''}）`, val: null, min: pMin, max: pMax });
-      rangeMin += pMin; rangeMax += pMax; hasRange = true;
+      // 条件A：電気新設（概算¥100,000、東電申請含む）
+      const baseFee = 100000;
+      lines.push({ label: `電源新設工事費（東電申請含む・最低¥75,000〜最高¥115,000程度）`, val: baseFee });
+      total += baseFee;
       // 電気ケーブル敷設
       if (g.newDistMode === 'custom' && g.newDistVal > 0) {
         const cableFee = g.newDistVal * 700;
@@ -66,7 +66,7 @@ function calcEstimate(r) {
         lines.push({ label: `電気工事費（コンセント新設等）`, val: 15000 });
         total += 15000;
       }
-      if (dist > 0) {
+      if (dist > 1) {
         const cableFee = dist * 700;
         lines.push({ label: `電気ケーブル敷設（${dist}m × ¥700）`, val: cableFee });
         total += cableFee;
@@ -220,8 +220,36 @@ function renderEstimate(r) {
     rangeEl.style.display = 'none';
   }
 
+  // 交通費参考表示
+  const transpEl = document.getElementById('estimateTransport');
+  if (transpEl) {
+    const transportRows = buildTransportRows(r);
+    if (transportRows.length > 0) {
+      transpEl.innerHTML = '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">'
+        + '<div style="font-size:11px;color:var(--text-dim);font-weight:700;margin-bottom:6px;">🚗 交通費参考（施工費とは別）</div>'
+        + transportRows.map(function(row) {
+            return `<div class="estimate-row"><span class="estimate-row-label">${row.label}</span><span class="estimate-row-val">${row.val}</span></div>`;
+          }).join('')
+        + '</div>';
+      transpEl.style.display = 'block';
+    } else {
+      transpEl.style.display = 'none';
+    }
+  }
+
   sec.style.display = 'block';
   dlBtn.style.display = 'block';
+}
+
+function buildTransportRows(r) {
+  const dists = r.officeDistances || [];
+  if (!dists.length) return [];
+  const days = parseInt(((r.workPlan || {}).days)) || 1;
+  return dists.map(function(od) {
+    const label = `交通費（${od.company}・${od.name}、${od.distKm}km）`;
+    const val = calcTransportLabel(od.distKm, od.distM, days);
+    return { label: label, val: val };
+  });
 }
 
 function buildEstimateText(r) {
@@ -247,6 +275,14 @@ function buildEstimateText(r) {
   lines.push(`　${fmtYen(est.total)}（税抜）`);
   if (est.hasRange) {
     lines.push(`　※変動項目を含む場合：${fmtYen(est.finalMin)}〜${fmtYen(est.finalMax)}`);
+  }
+  const transportRows = buildTransportRows(r);
+  if (transportRows.length > 0) {
+    lines.push('');
+    lines.push('■ 交通費参考（施工費とは別途）');
+    transportRows.forEach(function(row) {
+      lines.push(`　${row.label}：${row.val}`);
+    });
   }
   lines.push('');
   lines.push('※施工費のみの概算です。実際の費用は現場状況により変動します。');

@@ -1,6 +1,54 @@
 // ══════════════════════════════════════
 // 定数・状態
 // ══════════════════════════════════════
+
+// ══ 拠点定義 ══
+const OFFICES = [
+  {
+    company: 'SRM', name: '北海道',
+    address: '北海道札幌市中央区大通西14-1-13',
+    prefectures: ['北海道']
+  },
+  {
+    company: 'SRM', name: '東北・東京近郊',
+    address: '東京都港区新橋2-20-15',
+    prefectures: ['青森県','岩手県','宮城県','秋田県','山形県','福島県',
+                  '東京都','神奈川県','埼玉県','千葉県','茨城県','栃木県','群馬県',
+                  '新潟県','長野県','山梨県','静岡県','愛知県','岐阜県']
+  },
+  {
+    company: 'SRM', name: '沖縄',
+    address: '沖縄県糸満市西崎町',
+    prefectures: ['沖縄県']
+  },
+  {
+    company: 'バディネット', name: '東京近郊',
+    address: '東京都中央区新富1-18-1',
+    prefectures: ['東京都','神奈川県','埼玉県','千葉県','茨城県','栃木県','群馬県',
+                  '新潟県','長野県','山梨県','静岡県','愛知県','岐阜県']
+  },
+  {
+    company: 'バディネット', name: '関西',
+    address: '大阪府大阪市中央区道修町1-5-18',
+    prefectures: ['大阪府','京都府','兵庫県','奈良県','滋賀県','和歌山県','三重県',
+                  '鳥取県','島根県','岡山県','広島県','山口県','徳島県','香川県','愛媛県','高知県'],
+    nearGroup: '関西九州'
+  },
+  {
+    company: 'バディネット', name: '九州',
+    address: '福岡県福岡市博多区博多駅中央街5-11',
+    prefectures: ['福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県',
+                  '鳥取県','島根県','岡山県','広島県','山口県','徳島県','香川県','愛媛県','高知県'],
+    nearGroup: '関西九州'
+  },
+  {
+    company: 'バディネット', name: '広島',
+    address: '広島県広島市中区上八丁堀5-2',
+    prefectures: ['広島県','岡山県','山口県','島根県','鳥取県','愛媛県','香川県','高知県','徳島県'],
+    nearGroup: '関西九州'
+  },
+];
+
 const TOTAL = 17;
 const DEVICE_DEFS = [
   { key: 'IPカメラ',     icon: '📷' },
@@ -619,6 +667,24 @@ function isAllNoArm() {
   return keys.length === 0 || (keys.length===1 && keys[0]==='none');
 }
 const SKIP_STEPS = new Set([]);
+
+function setLocationConfirmed(confirmed) {
+  if (confirmed) {
+    SKIP_STEPS.add(6);
+  } else {
+    SKIP_STEPS.delete(6);
+    d.officeDistances = null;
+  }
+}
+
+function skipAreaStep() {
+  d.area = '';
+  d.areaDetail = '';
+  d.officeDistances = null;
+  let n = step + 1;
+  while (SKIP_STEPS.has(n)) n++;
+  if (n <= TOTAL) { step = n; showStep(step); }
+}
 function nextStep() {
   let n = step + 1;
   while (SKIP_STEPS.has(n)) n++;
@@ -1543,7 +1609,10 @@ document.addEventListener('touchend', function(e) {
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Enter') return;
   if (e.isComposing || e.keyCode === 229) return;
-  const tag = document.activeElement && document.activeElement.tagName;
+  const el = document.activeElement;
+  const tag = el && el.tagName;
+  // 現場名入力欄はオートコンプリートに任せるためEnterで次へ進めない
+  if (el && el.id === 'siteName') { e.preventDefault(); return; }
   if (tag === 'TEXTAREA') {
     if (!e.shiftKey) { e.preventDefault(); advanceFromCurrentStep(); }
     return;
@@ -1570,3 +1639,287 @@ function advanceFromCurrentStep() {
   }
 }
 
+// ══════════════════════════════════════
+// 場所検索・距離計算（Google Maps Places Autocomplete）
+// ══════════════════════════════════════
+let selectedPlace = null;
+
+function initAutocomplete() {
+  const input = document.getElementById('siteName');
+  if (!input || typeof google === 'undefined') return;
+
+  const autocomplete = new google.maps.places.Autocomplete(input, {
+    componentRestrictions: { country: 'jp' },
+    fields: ['name', 'formatted_address', 'geometry', 'address_components'],
+  });
+
+  // 入力内容の変化を監視（空になったら場所情報リセット）
+  input.addEventListener('input', function() {
+    const val = input.value.trim();
+    if (!val) {
+      setLocationConfirmed(false);
+      document.getElementById('locationResult').style.display = 'none';
+      selectedPlace = null;
+    }
+    // 内容があれば「次へ」ボタンを有効化（フリーテキストでも進める）
+    const nextBtn = document.getElementById('nextStep1');
+    if (nextBtn) nextBtn.disabled = !val;
+  });
+
+  // autocompleteが候補を入れると input イベントが発火しないので change でも監視
+  input.addEventListener('change', function() {
+    const val = input.value.trim();
+    const nextBtn = document.getElementById('nextStep1');
+    if (nextBtn) nextBtn.disabled = !val;
+    if (!val) {
+      setLocationConfirmed(false);
+      document.getElementById('locationResult').style.display = 'none';
+      selectedPlace = null;
+    }
+  });
+
+  autocomplete.addListener('place_changed', function() {
+    const place = autocomplete.getPlace();
+    // geometryがない = リストから選ばずEnterした or 候補なし → 場所なしで進む
+    if (!place.geometry) {
+      setLocationConfirmed(false);
+      document.getElementById('locationResult').style.display = 'none';
+      selectedPlace = null;
+      return;
+    }
+    onPlaceSelected(place);
+  });
+
+  // 初期状態：入力があれば次へ有効
+  const nextBtn = document.getElementById('nextStep1');
+  if (nextBtn) nextBtn.disabled = !input.value.trim();
+
+  // APIコールバック前に入力されていた場合を補完
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function getPrefecture(place) {
+  const comps = place.address_components || [];
+  const pref = comps.find(c => c.types.includes('administrative_area_level_1'));
+  return pref ? pref.long_name : null;
+}
+
+function getTargetOffices(prefecture) {
+  if (!prefecture) return OFFICES; // 不明なら全拠点
+
+  const matched = OFFICES.filter(o => o.prefectures.includes(prefecture));
+  if (matched.length === 0) return OFFICES; // マッチなしなら全拠点
+
+  // 関西・九州のnearGroupは両方まとめて返す（近い方は距離で後判定）
+  const hasNearGroup = matched.some(o => o.nearGroup);
+  if (hasNearGroup) {
+    const groups = [...new Set(matched.filter(o => o.nearGroup).map(o => o.nearGroup))];
+    const extras = OFFICES.filter(o => groups.includes(o.nearGroup) && !matched.includes(o));
+    return [...matched, ...extras];
+  }
+  return matched;
+}
+
+function onPlaceSelected(place) {
+  selectedPlace = place;
+  const resultEl = document.getElementById('locationResult');
+
+  d.sitePlaceName = place.name || '';
+  d.siteAddress = place.formatted_address || '';
+  d.siteLatLng = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+  setLocationConfirmed(true); // Step6をスキップ
+
+  const prefecture = getPrefecture(place);
+  const offices = getTargetOffices(prefecture);
+
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<div style="font-size:12px;color:var(--text-dim);padding:12px 0;">🚗 距離・料金を計算中...</div>';
+
+  calcDistanceMulti(place, offices, resultEl);
+}
+
+function calcDistanceMulti(place, offices, resultEl) {
+  const service = new google.maps.DistanceMatrixService();
+  service.getDistanceMatrix({
+    origins: offices.map(o => o.address),
+    destinations: [place.geometry.location],
+    travelMode: google.maps.TravelMode.DRIVING,
+    unitSystem: google.maps.UnitSystem.METRIC,
+  }, function(resp, status) {
+    if (status !== 'OK') {
+      resultEl.innerHTML = '<div style="font-size:12px;color:var(--danger);padding:8px 0;">距離の取得に失敗しました</div>';
+      return;
+    }
+
+    // 結果を整理
+    const results = offices.map(function(o, i) {
+      const el = resp.rows[i].elements[0];
+      if (el.status !== 'OK') return null;
+      return {
+        office: o,
+        distM: el.distance.value,
+        distKm: (el.distance.value / 1000).toFixed(1),
+        mins: Math.round(el.duration.value / 60),
+      };
+    }).filter(Boolean);
+
+    if (!results.length) {
+      resultEl.innerHTML = '<div style="font-size:12px;color:var(--danger);padding:8px 0;">ルートが見つかりませんでした</div>';
+      return;
+    }
+
+    // nearGroup（関西・九州）は近い方だけ残す
+    const nearGroups = [...new Set(results.map(r => r.office.nearGroup).filter(Boolean))];
+    let filtered = [...results];
+    nearGroups.forEach(function(grp) {
+      const grpItems = results.filter(r => r.office.nearGroup === grp);
+      const nearest = grpItems.reduce((a, b) => a.distM < b.distM ? a : b);
+      grpItems.forEach(function(item) {
+        if (item !== nearest) filtered = filtered.filter(r => r !== item);
+      });
+    });
+
+    d.officeDistances = filtered.map(r => ({
+      company: r.office.company, name: r.office.name,
+      distKm: r.distKm, distM: r.distM, mins: r.mins
+    }));
+
+    // 表示
+    const placeName = place.name || '';
+    const placeAddr = place.formatted_address || '';
+    let html = '<div class="location-result-card">'
+      + '<div class="location-result-title">📍 ' + placeName + '</div>'
+      + '<div class="location-result-row"><span class="location-result-label">住所</span>'
+      + '<span class="location-result-val" style="font-size:11px;max-width:65%;text-align:right;">' + placeAddr + '</span></div>';
+
+    filtered.forEach(function(r) {
+      const toll = calcTransportLabel(r.distKm, r.distM, null);
+      html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+        + '<div style="font-size:11px;font-weight:700;color:var(--accent2);margin-bottom:6px;">🏢 ' + r.office.company + '（' + r.office.name + '）</div>'
+        + '<div class="location-result-row"><span class="location-result-label">距離</span><span class="location-result-val">' + r.distKm + ' km</span></div>'
+        + '<div class="location-result-row"><span class="location-result-label">所要時間</span><span class="location-result-val">' + r.mins + ' 分</span></div>'
+        + '<div class="location-result-row"><span class="location-result-label">交通費概算（1日）</span><span class="location-result-val">' + toll + '</span></div>'
+        + '</div>';
+    });
+
+    html += '</div>';
+    resultEl.innerHTML = html;
+  });
+}
+
+// ══════════════════════════════════════
+// 交通費計算
+// ══════════════════════════════════════
+// days: 作業日数（nullの場合は1日として計算）
+function calcTransportLabel(distKm, distM, days) {
+  if (distM <= 20000) return '不要（目安）';
+  const oneway = parseFloat(distKm);
+  const roundTrip = Math.round(oneway * 2 * 110 * 1.1);
+  const d = (!days || days <= 1) ? 1 : days;
+  if (d <= 1) {
+    return '¥' + roundTrip.toLocaleString() + '程度（往復ETC込）';
+  }
+  if (oneway >= 100) {
+    // 宿泊パターン：往復交通費 + 宿泊費¥10,000×日数
+    const total = roundTrip + (10000 * d);
+    return '¥' + total.toLocaleString() + '程度（往復ETC込＋宿泊' + d + '日）';
+  }
+  // 日帰り複数日：往復×日数
+  return '¥' + (roundTrip * d).toLocaleString() + '程度（往復ETC込×' + d + '日）';
+}
+
+// ══════════════════════════════════════
+// Step 6：住所入力→ジオコード→距離計算
+// ══════════════════════════════════════
+function next6WithGeocode() {
+  const addrText = (document.getElementById('areaDetail') && document.getElementById('areaDetail').value || '').trim();
+  if (!addrText) {
+    // 住所なし：そのまま次へ
+    nextStep();
+    return;
+  }
+
+  const btn = document.getElementById('next6');
+  if (btn) { btn.disabled = true; btn.textContent = '📡 取得中...'; }
+
+  const geocoder = new google.maps.Geocoder();
+  geocoder.geocode({ address: addrText }, function(results, status) {
+    if (btn) { btn.disabled = false; btn.textContent = '次へ →'; }
+
+    if (status !== 'OK' || !results.length) {
+      // ジオコード失敗：距離なしで次へ
+      console.warn('Geocode failed:', status);
+      nextStep();
+      return;
+    }
+
+    const result = results[0];
+    const mockPlace = {
+      name: addrText,
+      formatted_address: result.formatted_address,
+      geometry: result.geometry,
+    };
+
+    // ステップ1の結果欄を再利用して表示（Step6には表示欄がないのでlocationResultへ）
+    const resultEl = document.getElementById('locationResult');
+    if (resultEl) {
+      resultEl.style.display = 'block';
+    }
+
+    // 距離計算後に次ステップへ
+    calcDistanceMultiThen(mockPlace, OFFICES, function() {
+      setLocationConfirmed(true);
+      nextStep();
+    });
+  });
+}
+
+// calcDistanceMulti のコールバック付き版
+function calcDistanceMultiThen(place, offices, callback) {
+  const service = new google.maps.DistanceMatrixService();
+  service.getDistanceMatrix({
+    origins: offices.map(o => o.address),
+    destinations: [place.geometry.location],
+    travelMode: google.maps.TravelMode.DRIVING,
+    unitSystem: google.maps.UnitSystem.METRIC,
+  }, function(resp, status) {
+    if (status !== 'OK') {
+      if (callback) callback();
+      return;
+    }
+
+    const results = offices.map(function(o, i) {
+      const el = resp.rows[i].elements[0];
+      if (el.status !== 'OK') return null;
+      return {
+        office: o,
+        distM: el.distance.value,
+        distKm: (el.distance.value / 1000).toFixed(1),
+        mins: Math.round(el.duration.value / 60),
+      };
+    }).filter(Boolean);
+
+    if (!results.length) {
+      if (callback) callback();
+      return;
+    }
+
+    const nearGroups = [...new Set(results.map(r => r.office.nearGroup).filter(Boolean))];
+    let filtered = [...results];
+    nearGroups.forEach(function(grp) {
+      const grpItems = results.filter(r => r.office.nearGroup === grp);
+      const nearest = grpItems.reduce((a, b) => a.distM < b.distM ? a : b);
+      grpItems.forEach(function(item) {
+        if (item !== nearest) filtered = filtered.filter(r => r !== item);
+      });
+    });
+
+    d.officeDistances = filtered.map(r => ({
+      company: r.office.company, name: r.office.name,
+      distKm: r.distKm, distM: r.distM, mins: r.mins
+    }));
+    d.siteAddress = place.formatted_address || place.name || '';
+
+    if (callback) callback();
+  });
+}

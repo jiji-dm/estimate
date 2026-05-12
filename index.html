@@ -6,6 +6,7 @@
 <title>現調レポート</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDtKIT6SPD8z5kGSLjV3uBF9l19BD65mo8&libraries=places&callback=initAutocomplete" async defer></script>
 </head>
 <body>
 <div class="app">
@@ -40,8 +41,9 @@
       <!-- Step 1: 現場名 -->
       <div class="step active" data-step="1">
         <div class="step-q">現場名を入力してください</div>
-        <input type="text" class="text-input" id="siteName" placeholder="例）新宿センタービル B1F" style="margin-bottom:22px;">
-        <button class="next-btn" onclick="nextStep()">次へ →</button>
+        <input type="text" class="text-input" id="siteName" placeholder="例）渋谷ヒカリエ、新宿センタービル..." style="margin-bottom:12px;" autocomplete="off">
+        <div id="locationResult" style="display:none;"></div>
+        <button class="next-btn" id="nextStep1" onclick="nextStep()" style="margin-top:8px;" disabled>次へ →</button>
       </div>
 
       <!-- Step 2: 工事内容（最初に聞く） -->
@@ -145,9 +147,10 @@
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>
 
-      <!-- Step 5.5: エリア選択（Step6として番号付け） -->
+      <!-- Step 6: エリア選択（場所検索で取得できなかった場合のみ表示） -->
       <div class="step" data-step="6">
-        <div class="step-q">現場のエリアは？</div>
+        <div class="step-q">現場のエリアを選択してください</div>
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">場所の自動取得ができなかった場合に入力してください</p>
         <div class="btn-grid col3">
           <button class="choice-btn" onclick="pickArea(this,'都内')"><span class="icon">🗼</span>都内</button>
           <button class="choice-btn" onclick="pickArea(this,'関東')"><span class="icon">🗾</span>関東</button>
@@ -155,16 +158,18 @@
           <button class="choice-btn" onclick="pickArea(this,'関西')"><span class="icon">🏯</span>関西</button>
           <button class="choice-btn" onclick="pickArea(this,'九州')"><span class="icon">🌋</span>九州</button>
           <button class="choice-btn" onclick="pickArea(this,'北海道')"><span class="icon">🦀</span>北海道</button>
+          <button class="choice-btn" onclick="pickArea(this,'沖縄')"><span class="icon">🌺</span>沖縄</button>
+          <button class="choice-btn" onclick="pickArea(this,'中国・四国')"><span class="icon">🌊</span>中国・四国</button>
         </div>
-        <!-- エリア詳細 -->
-        <div id="areaDetailSection" style="display:none;">
-          <textarea class="text-input" id="areaDetail" rows="1" placeholder="例）渋谷区、横浜市など（任意）"></textarea>
+        <div id="areaDetailSection" style="display:none;margin-top:4px;">
+          <textarea class="text-input" id="areaDetail" rows="2" placeholder="例）渋谷区、横浜市など（住所・地名）"></textarea>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:8px;" id="areaDetailToggle" style="display:none;">
-          <button class="toggle-btn" id="areaDetailYes" onclick="toggleAreaDetail('yes')">📝 詳細を記入</button>
+          <button class="toggle-btn" id="areaDetailYes" onclick="toggleAreaDetail('yes')">📝 住所を記入</button>
           <button class="toggle-btn" id="areaDetailNo"  onclick="toggleAreaDetail('no')">⏭️ スキップ</button>
         </div>
-        <button class="next-btn" id="next6" onclick="nextStep()" disabled>次へ →</button>
+        <button class="next-btn" id="next6" onclick="next6WithGeocode()" disabled>次へ →</button>
+        <button class="act-btn" style="width:100%;margin-bottom:10px;" onclick="skipAreaStep()">⏭️ スキップ（料金表示なし）</button>
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>
 
@@ -388,7 +393,7 @@
 
       <!-- Step 11: 配線方法 -->
       <div class="step" data-step="11">
-        <div class="step-q">配線方法は？</div>
+        <div class="step-q">LANケーブルの配線方法は？</div>
         <div class="btn-grid col3">
           <button class="choice-btn" onclick="pick(this,'wiring','露出')"><span class="icon">〰️</span>露出</button>
           <button class="choice-btn" onclick="pick(this,'wiring','配管')"><span class="icon">🔲</span>配管</button>
@@ -553,6 +558,7 @@
           <span class="estimate-total-val" id="estimateTotalVal"></span>
         </div>
         <div class="estimate-range" id="estimateRangeNote" style="display:none;"></div>
+        <div id="estimateTransport" style="display:none;"></div>
         <div class="estimate-note">※施工費のみの概算です。実際の費用は現場状況により変動します。</div>
       </div>
       <button class="act-btn" id="downloadEstimateBtn" onclick="downloadEstimate()" style="width:100%;margin-bottom:10px;display:none;">⬇️ 概算見積をファイルに書き出す</button>
