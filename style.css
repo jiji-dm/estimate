@@ -865,3 +865,33 @@ small.sub { color: var(--text-muted); font-size: 10px; display: block; margin-to
 .toast.show { transform: translateX(-50%) translateY(0); }
 .toast.green { background: #16a34a; }
 .toast.red   { background: #dc2626; }
+
+/* ══ 場所検索 ══ */
+.location-search-btn {
+  width: 100%; background: none; border: 1.5px solid var(--accent);
+  border-radius: 13px; color: var(--accent2); font-size: 13px; font-weight: 600;
+  font-family: 'Noto Sans JP', sans-serif;
+  padding: 13px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;
+}
+.location-search-btn:hover { background: rgba(124,109,255,0.08); }
+.location-search-btn:disabled { opacity: 0.5; cursor: default; }
+.location-candidates { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.location-candidate-btn {
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: 12px; color: var(--text-dim); font-size: 12px;
+  font-family: 'Noto Sans JP', sans-serif;
+  padding: 12px 14px; cursor: pointer; transition: all 0.18s; text-align: left;
+}
+.location-candidate-btn:hover { border-color: var(--accent); color: var(--text); }
+.location-candidate-btn.selected { border-color: var(--accent); color: var(--accent2); background: rgba(124,109,255,0.07); }
+.location-candidate-name { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+.location-candidate-addr { font-size: 11px; color: var(--text-dim); }
+.location-result-card {
+  background: var(--surface); border: 1.5px solid rgba(124,109,255,0.35);
+  border-radius: 14px; padding: 14px 16px; margin-bottom: 4px;
+}
+.location-result-title { font-size: 12px; color: var(--accent2); font-weight: 700; letter-spacing: 0.1em; margin-bottom: 10px; }
+.location-result-row { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.location-result-row:last-child { border-bottom: none; }
+.location-result-label { color: var(--text-dim); }
+.location-result-val { font-family: 'Syne', sans-serif; font-weight: 700; color: #fff; }
