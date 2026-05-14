@@ -1681,7 +1681,47 @@ function openModal(id) {
   if (!modalReport) return;
   document.getElementById('modalTitle').textContent = formatDateLabel(modalReport) + '　' + (modalReport.siteName||'');
   document.getElementById('modalBody').textContent  = buildText(modalReport);
+  renderModalEstimate(modalReport);
   document.getElementById('modalOverlay').classList.add('active');
+}
+
+// モーダル内に概算見積を表示する
+function renderModalEstimate(r) {
+  const el = document.getElementById('modalEstimate');
+  if (!el) return;
+  const est = calcEstimate(r);
+  if (est.camTotal === 0 && (r.powerGroups || []).length === 0) {
+    el.style.display = 'none';
+    return;
+  }
+  const rows = est.lines.map(function(l) {
+    const valStr = l.val !== null && l.val !== undefined
+      ? fmtYen(l.val)
+      : (l.min === 0 ? `〜${fmtYen(l.max)}` : `${fmtYen(l.min)}〜${fmtYen(l.max)}`);
+    return `<div class="estimate-row"><span class="estimate-row-label">${l.label}</span><span class="estimate-row-val">${valStr}</span></div>`;
+  }).join('');
+  const transportRows = buildTransportRows(r);
+  const transportHtml = transportRows.length > 0
+    ? '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+      + '<div style="font-size:11px;color:var(--text-dim);font-weight:700;margin-bottom:6px;">🚗 交通費参考（施工費とは別）</div>'
+      + transportRows.map(function(row) {
+          return `<div class="estimate-row"><span class="estimate-row-label">${row.label}</span><span class="estimate-row-val">${row.val}</span></div>`;
+        }).join('')
+      + '</div>'
+    : '';
+  el.innerHTML = `
+    <div class="estimate-section" style="display:block;margin:0;">
+      <div class="estimate-section-title">💰 概算見積（施工費のみ・機器代金別途）</div>
+      ${rows}
+      <div class="estimate-total-row">
+        <span class="estimate-total-label">最終概算合計（税抜）</span>
+        <span class="estimate-total-val">${fmtYen(est.total)}</span>
+      </div>
+      ${est.hasRange ? `<div class="estimate-range">※変動項目を含む場合の幅：${fmtYen(est.finalMin)}〜${fmtYen(est.finalMax)}</div>` : ''}
+      ${transportHtml}
+      <div class="estimate-note">※施工費のみの概算です。実際の費用は現場状況により変動します。</div>
+    </div>`;
+  el.style.display = 'block';
 }
 // モーダルを閉じる
 function closeModal(e) {
