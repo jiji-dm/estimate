@@ -1330,14 +1330,18 @@ function generateReport() {
     workPlan:     JSON.parse(JSON.stringify(d.workPlan||{})),
   };
 
-  document.getElementById('resultTitle').textContent =
-    currentReport.workDate + ' — ' + currentReport.siteName;
-  document.getElementById('resultBox').textContent = buildText(currentReport);
+  showReport(currentReport);
+}
 
+// レポートを結果パネルに表示する（フォーム生成・JSON読込・保存済み復元で共通利用）
+function showReport(r) {
+  currentReport = r;
+  document.getElementById('resultTitle').textContent = r.workDate + ' — ' + r.siteName;
+  document.getElementById('resultBox').textContent   = buildText(r);
   document.getElementById('stepsContainer').style.display = 'none';
   document.getElementById('progressWrap').style.display   = 'none';
   document.getElementById('resultPanel').classList.add('active');
-  renderEstimate(currentReport);
+  renderEstimate(r);
 }
 
 // ══════════════════════════════════════
@@ -1407,6 +1411,44 @@ function downloadSingle() {
   if (!currentReport) return;
   dl(buildText(currentReport), getFileName(currentReport));
   showToast('ファイルを書き出しました！', 'green');
+}
+
+// 現在のレポートを .json ファイルでダウンロードする（再読込・復元用）
+function downloadJson() {
+  if (!currentReport) return;
+  const r = currentReport;
+  const sn = (r.siteName || '現場').replace(/[\\\/:\*\?"<>\|]/g,'_');
+  let dateStr = 'nodate';
+  if (r.createdAt) {
+    const parts = r.createdAt.replace(/\//g,'-').split('-');
+    if (parts.length === 3) dateStr = parts[0] + parts[1].padStart(2,'0') + parts[2].padStart(2,'0');
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }));
+  a.download = dateStr + '_' + sn + '_data.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('JSONファイルを書き出しました！', 'green');
+}
+
+// JSONファイルを読み込んでレポートを結果パネルに表示する
+function loadFromJson(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const r = JSON.parse(e.target.result);
+      if (!r || !r.siteName) throw new Error('invalid');
+      showReport(r);
+      switchTab('input');
+      showToast('JSONを読み込みました！', 'green');
+    } catch(err) {
+      showToast('JSONの読み込みに失敗しました', 'red');
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
 }
 // 保存済み全件を1つの .txt ファイルでダウンロードする
 function exportAll() {

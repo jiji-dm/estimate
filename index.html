@@ -548,7 +548,10 @@
         <button class="act-btn primary" onclick="copyReport()">📋 コピー</button>
         <button class="act-btn" onclick="saveReport()">💾 アプリ内保存</button>
       </div>
-      <button class="act-btn" style="width:100%;margin-bottom:10px;" onclick="downloadSingle()">⬇️ このレポートをファイルに書き出す</button>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <button class="act-btn" style="flex:1;" onclick="downloadSingle()">⬇️ レポート書き出し (.txt)</button>
+        <button class="act-btn" style="flex:1;" onclick="downloadJson()">⬇️ データ書き出し (.json)</button>
+      </div>
       <!-- 概算見積セクション -->
       <div class="estimate-section" id="estimateSection" style="display:none;">
         <div class="estimate-section-title">💰 概算見積（施工費のみ・機器代金別途）</div>
@@ -571,6 +574,10 @@
     <div class="list-toolbar">
       <div style="font-family:'Syne',sans-serif;font-size:12px;color:var(--text-dim);letter-spacing:0.08em;" id="listCountLabel"></div>
       <div class="list-toolbar-btns">
+        <label class="export-btn" style="cursor:pointer;">
+          📂 JSONから読み込む
+          <input type="file" accept=".json" style="display:none;" onchange="loadFromJson(this)">
+        </label>
         <button class="export-btn" onclick="exportAll()">⬇️ 全件書き出し</button>
         <button class="delete-all-btn" onclick="confirmDeleteAll()">🗑️ 全件削除</button>
       </div>
