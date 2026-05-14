@@ -1410,6 +1410,29 @@ function buildArmText(armData) {
 }
 
 // グループのarmDataからアームテキストを生成する
+// グループ別のカメラ・アーム情報をレポート用テキストに変換する
+function buildGroupSummaryText(groups) {
+  if (!groups || groups.length === 0) return '';
+  return groups.map(function(g, i) {
+    var name = (g.groupName && g.groupName.trim())
+      ? 'グループ' + (i + 1) + '「' + g.groupName.trim() + '」'
+      : 'グループ' + (i + 1);
+    var camLines = [];
+    if (g.camIP    > 0) camLines.push('IPカメラ×' + g.camIP + '台');
+    if (g.camStereo > 0) camLines.push('ステレオカメラ×' + g.camStereo + '台');
+    var camStr = camLines.length ? camLines.join('・') : 'カメラなし';
+    var ad = g.armData || {};
+    var armLines = [];
+    if (ad.wall > 0) armLines.push('壁付け×' + ad.wall + '台');
+    if (ad.pole > 0) armLines.push('ポール×' + ad.pole + '台');
+    if (ad.ceil > 0) armLines.push('天井×' + ad.ceil + '台');
+    if (ad.none > 0) armLines.push('アームなし×' + ad.none + '台');
+    var armStr = armLines.length ? armLines.join('・') : '未設定';
+    return name + '（sys' + g.count + '台）\n　カメラ：' + camStr + '\n　アーム：' + armStr;
+  }).join('\n');
+}
+
+// 後方互換用：グループアームの合計テキスト（旧形式）
 function buildGroupArmText(groups) {
   if (!groups || groups.length === 0) return '';
   var totals = { wall: 0, pole: 0, ceil: 0, none: 0 };
@@ -1502,9 +1525,7 @@ ${haizaiLine}
 
 【機器情報】
 システム台数：${r.systemCount}台（最大${r.systemCount*3}台接続可）
-カメラ種類・台数：
-${r.cameraText}
-${r.armText}
+${buildGroupSummaryText(r.powerGroups) || ('カメラ種類・台数：\n' + r.cameraText + '\n' + r.armText)}
 ${armHandlingLine}
 
 【電源供給】
