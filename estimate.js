@@ -19,7 +19,21 @@ function calcEstimate(r) {
   const sysCount  = r.systemCount || 1;
 
   if (camTotal > 0) {
-    // 基本設置工事費（1システム分固定）
+    // 各グループの「sys1相当の無料枠候補値」を算出
+    // グループ内ではカメラがプール（システム別ではない）ため、count>=2のときは
+    // ceil(カメラ数 / システム数) でそのグループのsys1のカメラ数を推定する。
+    // 上限は1システムあたりの最大接続数3台。
+    const groupFree = groups.map(function(g) {
+      const gCam = (g.camIP || 0) + (g.camStereo || 0);
+      const gCnt = Math.max(1, g.count || 1);
+      return Math.min(3, Math.ceil(gCam / gCnt));
+    });
+    // 最もカメラの多いグループのsys1を「基本工事の充当先」として採用
+    const freeCams = groupFree.length
+      ? Math.max.apply(null, groupFree)
+      : Math.min(3, camTotal);
+
+    // 基本工事費（sys1 + sys1のカメラ最大3台込み）
     const base = 65000;
     lines.push({ label: `基本設置工事費`, val: base });
     total += base;
@@ -32,8 +46,8 @@ function calcEstimate(r) {
       total += sysFee;
     }
 
-    // 追加カメラ費（4台目以降）
-    const extraCam = Math.max(0, camTotal - 3);
+    // 追加カメラ費（sys1の3台超過分 + 他システム紐付きのカメラ全部）
+    const extraCam = Math.max(0, camTotal - freeCams);
     if (extraCam > 0) {
       const extraFee = extraCam * 15000;
       lines.push({ label: `追加カメラ工事費（${extraCam}台 × ¥15,000）`, val: extraFee });
