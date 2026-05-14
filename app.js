@@ -3,6 +3,7 @@
 // ══════════════════════════════════════
 
 // ══ 拠点定義 ══
+// 施工拠点の定義（会社名・住所・担当都道府県・nearGroup）
 const OFFICES = [
   {
     company: 'SRM', name: '北海道',
@@ -49,7 +50,9 @@ const OFFICES = [
   },
 ];
 
+// 総ステップ数
 const TOTAL = 17;
+// 選択可能な機器種別の定義（キー名・アイコン）
 const DEVICE_DEFS = [
   { key: 'IPカメラ',     icon: '📷' },
   { key: 'ステレオカメラ', icon: '📸' },
@@ -58,7 +61,9 @@ const DEVICE_DEFS = [
   { key: 'AirKnock',    icon: '💨' },
 ];
 
+// アプリ全体の状態変数（step:現在ステップ / d:入力値 / kosoMode:高所作業 / tokuMode:特記事項 / currentReport:生成済みレポート / modalReport:モーダル表示中レポート）
 let step = 1, d = {}, kosoMode = null, tokuMode = null, currentReport = null, modalReport = null;
+// d の初期値設定
 d.systemCount  = 1;
 d.cameraCounts = {};
 d.armData      = {};
@@ -71,10 +76,13 @@ const today = new Date();
 const WEEKDAYS = ['日','月','火','水','木','金','土'];
 const MONTHS_JA = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 
+// カレンダー状態マップ（ステップID → {year, month, sel}）
 const calStateMap = {};
+// カレンダー状態の初期化（未初期化の場合のみ）
 function initCalState(id) {
   if (!calStateMap[id]) calStateMap[id] = { year:today.getFullYear(), month:today.getMonth(), sel:null };
 }
+// 指定IDのカレンダーUIを構築・描画する
 function buildCalById(id) {
   initCalState(id);
   const s = calStateMap[id];
@@ -114,11 +122,13 @@ function buildCalById(id) {
     if (d.dateData[key]) d.dateData[key].date = s.sel;
   }
 }
+// カレンダーの月を前後に移動する
 function calMoveById(id, delta) {
   initCalState(id); const s=calStateMap[id];
   s.month+=delta; if(s.month<0){s.month=11;s.year--;} if(s.month>11){s.month=0;s.year++;}
   buildCalById(id);
 }
+// カレンダーで日付を選択し d.dateData に反映する
 function selectCalDayById(id, day) {
   initCalState(id); const s=calStateMap[id];
   s.sel={y:s.year,m:s.month,d:day};
@@ -129,9 +139,12 @@ function selectCalDayById(id, day) {
 // ══════════════════════════════════════
 // 電源供給グループ（Step9）
 // ══════════════════════════════════════
+// 電源供給グループの配列
 let powerGroups = [];
+// 電源グループのID採番カウンター
 let powerGid = 0;
 
+// 電源供給ステップの初期化（グループがなければ1件追加）
 function initPowerStep() {
   const sysTotal = d.systemCount || 1;
   document.getElementById('powerSysTotalLabel').textContent = sysTotal;
@@ -140,6 +153,7 @@ function initPowerStep() {
   renderPowerGroups();
 }
 
+// 電源供給グループを1件追加する
 function addPowerGroup() {
   const sysTotal = d.systemCount || 1;
   const assigned = powerGroups.reduce((s,g) => s+g.count, 0);
@@ -158,6 +172,7 @@ function addPowerGroup() {
   renderPowerGroups();
 }
 
+// 電源供給グループ一覧をDOMに描画する
 function renderPowerGroups() {
   var sysTotal = d.systemCount || 1;
   var assigned = powerGroups.reduce(function(s,g){return s+g.count;}, 0);
@@ -182,6 +197,7 @@ function renderPowerGroups() {
   });
 }
 
+// 電源グループの入力が完了しているか判定する
 function isPowerGroupComplete(g) {
   if (!g.power) return false;
   if (g.power === 'unknown') return true;
@@ -199,6 +215,7 @@ function isPowerGroupComplete(g) {
   return false;
 }
 
+// 電源グループの設定内容をサマリーテキストで返す
 function getPowerGroupSummary(g) {
   if (!g.power) return '未設定';
   if (g.power === 'unknown') return '既設電源：不明';
@@ -216,6 +233,7 @@ function getPowerGroupSummary(g) {
   return '';
 }
 
+// 電源グループ1件分のDOMノードを生成して返す
 function buildPowerGroupDOM(g, idx, sysTotal) {
   var complete = isPowerGroupComplete(g);
   var summary  = getPowerGroupSummary(g);
@@ -391,10 +409,12 @@ function buildPowerGroupDOM(g, idx, sysTotal) {
   return wrap;
 }
 
+// 電源グループの任意キーに値をセットして再描画する
 function pgSet(id, key, val) {
   const g = powerGroups.find(x => x.id===id); if(!g) return;
   g[key] = val; renderPowerGroups();
 }
+// 電源グループのグループ名をセットする
 function pgSetGroupName(id, val) {
   const g = powerGroups.find(x => x.id===id); if(!g) return;
   g.groupName = val;
@@ -409,19 +429,23 @@ function pgSetGroupName(id, val) {
     }
   });
 }
+// 電源グループの数値項目を増減する
 function pgChange(id, key, delta) {
   const g = powerGroups.find(x => x.id===id); if(!g) return;
   const min = key==='newDistVal' ? 10 : 1;
   g[key] = Math.max(min, (g[key]||min) + delta);
   renderPowerGroups();
 }
+// 電源グループの開閉状態を切り替える
 function pgToggle(id) {
   const g = powerGroups.find(x => x.id===id); if(!g) return;
   g.open = !g.open; renderPowerGroups();
 }
+// 電源グループを削除する
 function pgDelete(id) {
   powerGroups = powerGroups.filter(x => x.id!==id); renderPowerGroups();
 }
+// 設置場所（屋内/屋外）を選択しポール設置セクションの表示を切り替える
 function pickLocation(btn, val) {
   btn.closest('.btn-grid').querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
@@ -432,6 +456,7 @@ function pickLocation(btn, val) {
   const nb = document.getElementById('next5');
   if (nb) nb.disabled = false;
 }
+// ポール新設の有無を選択し掘削セクションの表示を切り替える
 function pickPole(btn, val) {
   btn.closest('.btn-grid').querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
@@ -444,6 +469,7 @@ function pickPole(btn, val) {
 // ══════════════════════════════════════
 // エリア選択
 // ══════════════════════════════════════
+// エリアを選択し「次へ」ボタンを有効化する
 function pickArea(btn, val) {
   btn.closest('.btn-grid').querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
@@ -453,12 +479,14 @@ function pickArea(btn, val) {
   const nb = document.getElementById('next6');
   if (nb) nb.disabled = false;
 }
+// エリア詳細入力欄の表示/非表示を切り替える
 function toggleAreaDetail(mode) {
   document.getElementById('areaDetailYes').classList.toggle('selected', mode === 'yes');
   document.getElementById('areaDetailNo').classList.toggle('selected',  mode === 'no');
   const sec = document.getElementById('areaDetailSection');
   if (sec) sec.style.display = mode === 'yes' ? 'block' : 'none';
 }
+// 工事内容（設置/撤去/仮設）を選択する
 function pickKojiType(btn, val) {
   btn.closest('.btn-grid').querySelectorAll('.choice-btn').forEach(b=>b.classList.remove('selected'));
   btn.classList.add('selected');
@@ -470,6 +498,7 @@ function pickKojiType(btn, val) {
 // ══════════════════════════════════════
 // 日付ステップ（Step3）の構築
 // ══════════════════════════════════════
+// 工事内容に応じた日付入力ステップを構築する
 function buildDateStep() {
   const isKasetsu = d.kojiType === '仮設';
   document.getElementById('dateBlock_single').style.display  = isKasetsu ? 'none'  : 'block';
@@ -486,6 +515,7 @@ function buildDateStep() {
   }
 }
 
+// 指定IDの日付入力セクション（確定/不確定/未定タブ）を構築する
 function buildDateSection(id) {
   const containerId = 'dateSection_'+id;
   const el = document.getElementById(containerId);
@@ -511,6 +541,7 @@ function buildDateSection(id) {
   buildRangeSection(id);
 }
 
+// 日付入力モード（確定/不確定/未定）を切り替える
 function setDateMode(id, mode, el) {
   el.closest('.date-mode-tabs').querySelectorAll('.date-mode-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
@@ -524,7 +555,9 @@ function setDateMode(id, mode, el) {
 // ══════════════════════════════════════
 // 不確定レンジUI
 // ══════════════════════════════════════
+// 日付範囲選択の状態マップ（ステップID → {fromPrec, toPrec}）
 const rangeStateMap = {};
+// 日付範囲選択UIを構築する
 function buildRangeSection(id) {
   var el = document.getElementById('rangeContainer_' + id);
   if (!el) return;
@@ -620,6 +653,7 @@ function updRangeById(id) {
 // ══════════════════════════════════════
 // 日付テキスト取得
 // ══════════════════════════════════════
+// 指定IDの選択済み日付をテキスト形式で返す
 function getDateText(id) {
   const dd = d.dateData[id];
   if (!dd) return '未入力';
@@ -631,6 +665,7 @@ function getDateText(id) {
   }
   return '未選択';
 }
+// ファイル名用の日付文字列（yyyymmdd）を返す
 function getDateFileStr() {
   const dd = d.dateData;
   if (d.kojiType==='仮設') {
@@ -645,10 +680,12 @@ function getDateFileStr() {
 // ══════════════════════════════════════
 // ステップ管理
 // ══════════════════════════════════════
+// プログレスバーと現在ステップ番号を更新する
 function updateProgress() {
   document.getElementById('progressFill').style.width = ((step-1)/TOTAL*100) + '%';
   document.getElementById('progressNum').textContent = String(step).padStart(2,'0') + ' / 17';
 }
+// 指定ステップを表示する（スキップステップは自動スルー）
 function showStep(n) {
   document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
   const t = document.querySelector('[data-step="'+n+'"]');
@@ -662,12 +699,15 @@ function showStep(n) {
   if (n === 15 && d.kojiType === '設置') { step=16; showStep(16); return; }
   if (n === 16 && isAllNoArm()) { step=17; showStep(17); return; }
 }
+// アーム取付がすべて「なし」か判定する
 function isAllNoArm() {
   const keys = Object.keys(d.armData||{});
   return keys.length === 0 || (keys.length===1 && keys[0]==='none');
 }
+// スキップするステップ番号のSet（場所確定時にStep6を追加）
 const SKIP_STEPS = new Set([]);
 
+// 場所確定状態を管理する（確定時はStep6をSKIP_STEPSに追加）
 function setLocationConfirmed(confirmed) {
   if (confirmed) {
     SKIP_STEPS.add(6);
@@ -677,6 +717,7 @@ function setLocationConfirmed(confirmed) {
   }
 }
 
+// エリア選択ステップをスキップして次ステップへ進む
 function skipAreaStep() {
   d.area = '';
   d.areaDetail = '';
@@ -685,20 +726,24 @@ function skipAreaStep() {
   while (SKIP_STEPS.has(n)) n++;
   if (n <= TOTAL) { step = n; showStep(step); }
 }
+// 次のステップへ進む（SKIP_STEPSに含まれるステップは飛ばす）
 function nextStep() {
   let n = step + 1;
   while (SKIP_STEPS.has(n)) n++;
   if (n <= TOTAL) { step = n; showStep(step); }
 }
+// 前のステップへ戻る（SKIP_STEPSに含まれるステップは飛ばす）
 function prevStep() {
   let n = step - 1;
   while (SKIP_STEPS.has(n)) n--;
   if (n >= 1) { step = n; showStep(step); }
 }
+// Step10からStep9に戻る
 function goBackFrom10() {
   step = 9; showStep(step);
 }
 
+// 汎用選択ボタン処理（d[key]に値をセットし次へボタンを有効化）
 function pick(btn, key, val) {
   btn.closest('.btn-grid').querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
@@ -714,6 +759,7 @@ function pick(btn, key, val) {
 // ══════════════════════════════════════
 // システム台数
 // ══════════════════════════════════════
+// システム台数を増減する
 function sysCountChange(delta) {
   d.systemCount = Math.max(1, (d.systemCount||1) + delta);
   document.getElementById('sysCountVal').textContent = d.systemCount;
@@ -724,6 +770,7 @@ function sysCountChange(delta) {
 // ══════════════════════════════════════
 // デバイスリスト（Step8）
 // ══════════════════════════════════════
+// 機器選択リストをDOMに構築する
 function buildDeviceList() {
   const list = document.getElementById('deviceList');
   list.innerHTML = DEVICE_DEFS.map(({ key, icon }) => {
@@ -745,6 +792,7 @@ function buildDeviceList() {
   updateCameraTotal();
 }
 
+// 機器種別の選択状態をトグルする
 function toggleDevice(key) {
   const id = key.replace(/\s/g,'_');
   const row = document.getElementById('devRow_'+id);
@@ -762,6 +810,7 @@ function toggleDevice(key) {
   updateCameraTotal();
 }
 
+// 機器の台数を増減する
 function devCntChange(key, delta) {
   const id = key.replace(/\s/g,'_');
   const row = document.getElementById('devRow_'+id);
@@ -781,10 +830,12 @@ function devCntChange(key, delta) {
   updateCameraTotal();
 }
 
+// IPカメラ＋ステレオカメラの合計台数を返す
 function getTotalCameras() {
   return DEVICE_DEFS.reduce((s, { key }) => s + (d.cameraCounts[key]||0), 0);
 }
 
+// カメラ合計台数表示を更新する
 function updateCameraTotal() {
   const total = getTotalCameras();
   const max   = (d.systemCount||1) * 3;
@@ -817,6 +868,7 @@ function updateCameraTotal() {
   }
 }
 
+// Step8（機器選択）の次へ処理（カメラ未選択時は警告）
 function tryNextStep8() {
   const total = getTotalCameras();
   const max   = (d.systemCount||1) * 3;
@@ -828,6 +880,7 @@ function tryNextStep8() {
 // ══════════════════════════════════════
 // アームステップ（Step10）
 // ══════════════════════════════════════
+// アーム取付ステップを初期化する
 function initArmStep() {
   const camTotal = getTotalCameras();
   document.getElementById('armTotalNum').textContent = camTotal;
@@ -859,6 +912,7 @@ function initArmStep() {
   updateArmStatus();
 }
 
+// アーム取付済みのシステム台数を返す
 function getArmAssigned() {
   let total = 0;
   if (d.armData.wall) {
@@ -872,17 +926,20 @@ function getArmAssigned() {
   return total;
 }
 
+// 指定アーム種別の取付方法別合計数を返す
 function getArmSubTotal(armKey) {
   if (!d.armData[armKey]) return 0;
   if (armKey === 'pole' || armKey === 'none') return d.armData[armKey].count || 0;
   return Object.values(d.armData[armKey].methods||{}).reduce((s,c) => s+c, 0);
 }
 
+// 指定アーム種別のサブ合計表示を更新する
 function updateArmSubTotal(armKey) {
   const el = document.getElementById('armSubTotal_'+armKey);
   if (el) el.textContent = getArmSubTotal(armKey);
 }
 
+// アーム取付方法の行スタイル（選択済みかどうか）を更新する
 function updateMethodRowStyle(armKey, method, cnt) {
   const rows = document.querySelectorAll(`#armMethods_${armKey} .arm-method-row`);
   rows.forEach(row => {
@@ -892,6 +949,7 @@ function updateMethodRowStyle(armKey, method, cnt) {
   });
 }
 
+// アーム取付ステップ全体のステータスと次へボタンを更新する
 function updateArmStatus() {
   const camTotal  = getTotalCameras();
   const assigned  = getArmAssigned();
@@ -912,6 +970,7 @@ function updateArmStatus() {
   }
 }
 
+// アーム種別（壁面/天井等）の展開状態をトグルする
 function toggleArm(key) {
   const card  = document.getElementById('armCard_'+key);
   const check = document.getElementById('armCheck_'+key);
@@ -950,6 +1009,7 @@ function toggleArm(key) {
   updateArmStatus();
 }
 
+// アーム取付方法の台数を増減する
 function armMethodCntChange(armKey, method, delta) {
   if (!d.armData[armKey]) return;
   const camTotal = getTotalCameras();
@@ -970,6 +1030,7 @@ function armMethodCntChange(armKey, method, delta) {
   updateArmStatus();
 }
 
+// アーム種別の合計台数を増減する
 function armCntChange(armKey, delta) {
   if (!d.armData[armKey]) return;
   const camTotal = getTotalCameras();
@@ -987,6 +1048,7 @@ function armCntChange(armKey, delta) {
   updateArmStatus();
 }
 
+// LANケーブル長を増減する
 function lanCntChange(delta) {
   const el   = document.getElementById('lanLength');
   const disp = document.getElementById('lanLengthVal');
@@ -999,6 +1061,7 @@ function lanCntChange(delta) {
 // ══════════════════════════════════════
 // 作業計画ステップ（Step12）
 // ══════════════════════════════════════
+// 作業計画ステップのUIを構築する
 function buildWorkStep() {
   const isKasetsu = d.kojiType === '仮設';
   document.getElementById('workBlock_single').style.display   = isKasetsu ? 'none'  : 'block';
@@ -1015,6 +1078,7 @@ function buildWorkStep() {
   }
 }
 
+// 作業計画の1セクション（日数・休日・夜間等）を構築する
 function buildWorkSection(id) {
   const el = document.getElementById('workSection_'+id);
   if (!el) return;
@@ -1052,6 +1116,7 @@ function buildWorkSection(id) {
   </div>`;
 }
 
+// 作業計画の数値項目を増減する
 function workPlanChange(id, key, delta) {
   if (!d.workPlan) d.workPlan = {};
   if (!d.workPlan[id]) d.workPlan[id] = { workers:2, days:1, hours:3 };
@@ -1061,6 +1126,7 @@ function workPlanChange(id, key, delta) {
   if (el) el.textContent = d.workPlan[id][key];
 }
 
+// 高所作業の有無を切り替える
 function toggleKoso(mode) {
   kosoMode = mode;
   document.getElementById('kosoNone').classList.toggle('selected', mode==='none');
@@ -1070,6 +1136,7 @@ function toggleKoso(mode) {
   document.getElementById('next13').disabled = false;
 }
 
+// 高所作業の使用機材を選択する
 function kosoEquipPick(btn, val) {
   btn.classList.toggle('selected');
   if (!Array.isArray(d.kosoEquip)) d.kosoEquip = [];
@@ -1090,6 +1157,7 @@ function kosoEquipPick(btn, val) {
     }
   }
 }
+// 特記事項入力欄の表示/非表示を切り替える
 function toggleToku(mode) {
   tokuMode = mode;
   document.getElementById('tokNone').classList.toggle('selected', mode==='none');
@@ -1101,6 +1169,7 @@ function toggleToku(mode) {
 // ══════════════════════════════════════
 // レポート生成
 // ══════════════════════════════════════
+// アーム取付情報をレポート用テキストに変換する
 function buildArmText(armData) {
   if (!armData || Object.keys(armData).length === 0) return 'アーム　　：未設定';
   const lines = [];
@@ -1115,6 +1184,7 @@ function buildArmText(armData) {
   return lines.length ? lines.join('\n') : 'アーム　　：未設定';
 }
 
+// カメラ台数情報をレポート用テキストに変換する
 function buildCameraText(counts, other) {
   const lines = DEVICE_DEFS
     .filter(({ key }) => (counts[key]||0) > 0)
@@ -1123,6 +1193,7 @@ function buildCameraText(counts, other) {
   return lines.length ? lines.join('\n') : '　 未選択';
 }
 
+// 作業日程をレポート用テキストに変換する
 function buildWorkDateText(r) {
   if (r.kojiType === '仮設') {
     return `設置日　　：${r.installDate}\n撤去日　　：${r.removeDate}`;
@@ -1131,6 +1202,7 @@ function buildWorkDateText(r) {
   return `${label}　　：${r.workDate}`;
 }
 
+// 作業計画（日数・休日・夜間等）をレポート用テキストに変換する
 function buildWorkPlanText(r) {
   if (r.kojiType === '仮設') {
     const i = r.workPlan.install || {};
@@ -1154,6 +1226,7 @@ ${r.kosoLine}
 ${r.kosoLine}`;
 }
 
+// currentReport オブジェクト全体をレポートテキストに変換する
 function buildText(r) {
   const powerText = (r.powerGroups||[]).map(function(g,i) {
     var label = (g.groupName && g.groupName.trim())
@@ -1206,6 +1279,7 @@ ${r.tokuLine}
 ━━━━━━━━━━━━━━━━━━━━━━`;
 }
 
+// フォームの入力値から currentReport を生成し結果パネルに表示する
 function generateReport() {
   let kosoLine = '高所作業　：なし';
   if (kosoMode === 'yes') {
@@ -1269,6 +1343,7 @@ function generateReport() {
 // ══════════════════════════════════════
 // コピー・保存・ダウンロード
 // ══════════════════════════════════════
+// テキストをクリップボードにコピーする
 function copyText(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text)
@@ -1278,6 +1353,7 @@ function copyText(text) {
     fallbackCopy(text);
   }
 }
+// clipboard API が使えない場合のコピーフォールバック処理
 function fallbackCopy(text) {
   const ta = document.createElement('textarea');
   ta.value = text;
@@ -1293,13 +1369,16 @@ function fallbackCopy(text) {
   }
   document.body.removeChild(ta);
 }
+// 現在のレポートをクリップボードにコピーする
 function copyReport() {
   copyText(buildText(currentReport));
 }
+// モーダル表示中のレポートをクリップボードにコピーする
 function copyModalReport() {
   if (!modalReport) return;
   copyText(buildText(modalReport));
 }
+// 現在のレポートを localStorage に保存する
 function saveReport() {
   if (!currentReport) return;
   const list = getSaved();
@@ -1309,6 +1388,7 @@ function saveReport() {
   updateBadge();
   showToast('アプリ内に保存しました！', 'green');
 }
+// レポートのダウンロードファイル名（日付_現場名.txt）を生成する
 function getFileName(r) {
   const sn = (r.siteName || '現場').replace(/[\\\/:\*\?"<>\|]/g,'_');
   // 作成日（createdAt）をyyyymmdd形式に変換
@@ -1322,11 +1402,13 @@ function getFileName(r) {
   }
   return dateStr + '_' + sn + '.txt';
 }
+// 現在のレポートを .txt ファイルでダウンロードする
 function downloadSingle() {
   if (!currentReport) return;
   dl(buildText(currentReport), getFileName(currentReport));
   showToast('ファイルを書き出しました！', 'green');
 }
+// 保存済み全件を1つの .txt ファイルでダウンロードする
 function exportAll() {
   const list = getSaved();
   if (!list.length) { showToast('保存済みデータがありません', 'red'); return; }
@@ -1336,6 +1418,7 @@ function exportAll() {
   dl(text, fname);
   showToast('全' + list.length + '件を書き出しました！', 'green');
 }
+// テキストをファイルとしてダウンロードする汎用関数
 function dl(text, filename) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
@@ -1347,18 +1430,23 @@ function dl(text, filename) {
 // ══════════════════════════════════════
 // ローカルストレージ
 // ══════════════════════════════════════
+// localStorage から保存済みレポート一覧を取得する
 function getSaved() { try { return JSON.parse(localStorage.getItem('gencho_v4')) || []; } catch { return []; } }
+// 保存済みレポート一覧を localStorage に保存する
 function setSaved(list) { localStorage.setItem('gencho_v4', JSON.stringify(list)); }
+// 指定IDのレポートを localStorage から削除する
 function deleteSaved(id) {
   setSaved(getSaved().filter(r => r.id !== id));
   updateBadge(); renderList();
   showToast('削除しました', 'red');
 }
+// 保存済みレポートを全件削除する
 function deleteAllSaved() {
   setSaved([]);
   updateBadge(); renderList();
   showToast('全件削除しました', 'red');
 }
+// タブの保存済み件数バッジを更新する
 function updateBadge() {
   const n = getSaved().length;
   document.getElementById('savedCount').textContent = n ? '(' + n + ')' : '';
@@ -1367,7 +1455,9 @@ function updateBadge() {
 // ══════════════════════════════════════
 // 確認ダイアログ
 // ══════════════════════════════════════
+// 確認ダイアログのOKボタン押下時のコールバック関数
 let confirmCallback = null;
+// 確認ダイアログを表示する
 function showConfirm(icon, title, msg, cb) {
   document.getElementById('confirmIcon').textContent = icon;
   document.getElementById('confirmTitle').textContent = title;
@@ -1376,13 +1466,16 @@ function showConfirm(icon, title, msg, cb) {
   document.getElementById('confirmOverlay').classList.add('active');
   document.getElementById('confirmOkBtn').onclick = () => { closeConfirm(); cb(); };
 }
+// 確認ダイアログを閉じる
 function closeConfirm() {
   document.getElementById('confirmOverlay').classList.remove('active');
   confirmCallback = null;
 }
+// 1件削除の確認ダイアログを表示する
 function confirmDeleteOne(id, name) {
   showConfirm('🗑️', '削除しますか？', name + '\nこの操作は取り消せません。', () => deleteSaved(id));
 }
+// 全件削除の確認ダイアログを表示する
 function confirmDeleteAll() {
   const n = getSaved().length;
   if (!n) { showToast('保存済みデータがありません', 'red'); return; }
@@ -1392,6 +1485,7 @@ function confirmDeleteAll() {
 // ══════════════════════════════════════
 // 保存一覧レンダリング
 // ══════════════════════════════════════
+// レポートの日付を一覧表示用のラベルテキストに変換する
 function formatDateLabel(r) {
   const raw = r.workDate || '';
   if (!raw || raw === '未選択') return '日付未定';
@@ -1401,6 +1495,7 @@ function formatDateLabel(r) {
   }
   return raw;
 }
+// 保存済みレポート一覧を描画する
 function renderList() {
   const list = getSaved();
   const lbl = document.getElementById('listCountLabel');
@@ -1453,6 +1548,7 @@ function renderList() {
   }).join('');
 }
 
+// カード編集用の入力欄HTMLを生成する
 function makeEditItem(rid, key, label, currentVal, type, options) {
   var id = 'cei_' + rid + '_' + key;
   var areaId = 'cedit_area_' + rid + '_' + key;
@@ -1472,18 +1568,21 @@ function makeEditItem(rid, key, label, currentVal, type, options) {
     '</div>';
 }
 
+// カード編集入力欄の表示/非表示を切り替える
 function toggleCeditInput(id) {
   const el = document.getElementById(id);
   if (!el) return;
   const isOpen = el.style.display !== 'none';
   el.style.display = isOpen ? 'none' : 'block';
 }
+// 保存済みカードの編集モードをトグルする
 function toggleCardEdit(rid) {
   const panel = document.getElementById('cedit_'+rid);
   if (!panel) return;
   const isOpen = panel.style.display !== 'none';
   panel.style.display = isOpen ? 'none' : 'block';
 }
+// カード編集での選択ボタン処理
 function ceditChoice(btn, rid, key, val) {
   btn.closest('div').querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
@@ -1491,6 +1590,7 @@ function ceditChoice(btn, rid, key, val) {
   if (!window._ceditTmp[rid]) window._ceditTmp[rid] = {};
   window._ceditTmp[rid][key] = val;
 }
+// カード編集内容を保存する
 function saveCardEdit(rid) {
   const list = getSaved();
   const r = list.find(x => x.id === rid);
@@ -1509,6 +1609,7 @@ function saveCardEdit(rid) {
   renderList();
   showToast('保存しました！', 'green');
 }
+// 保存済みリストから指定レポートをダウンロードする
 function downloadFromList(id) {
   const r = getSaved().find(x => x.id === id);
   if (!r) return;
@@ -1519,6 +1620,7 @@ function downloadFromList(id) {
 // ══════════════════════════════════════
 // モーダル
 // ══════════════════════════════════════
+// 保存済みレポートをモーダルで開く
 function openModal(id) {
   modalReport = getSaved().find(r => r.id === id);
   if (!modalReport) return;
@@ -1526,10 +1628,12 @@ function openModal(id) {
   document.getElementById('modalBody').textContent  = buildText(modalReport);
   document.getElementById('modalOverlay').classList.add('active');
 }
+// モーダルを閉じる
 function closeModal(e) {
   if (!e || e.target === document.getElementById('modalOverlay'))
     document.getElementById('modalOverlay').classList.remove('active');
 }
+// モーダル表示中のレポートをダウンロードする
 function downloadModal() {
   if (!modalReport) return;
   dl(buildText(modalReport), getFileName(modalReport));
@@ -1539,6 +1643,7 @@ function downloadModal() {
 // ══════════════════════════════════════
 // リセット・タブ
 // ══════════════════════════════════════
+// フォームと状態を全リセットして入力画面に戻る
 function resetAll() {
   d = { systemCount:1, cameraCounts:{}, armData:{}, workPlan:{}, kosoEquip:[],
         dateData:{ single:{mode:'confirm'}, install:{mode:'confirm'}, remove:{mode:'confirm'} } };
@@ -1567,6 +1672,7 @@ function resetAll() {
   document.getElementById('lanLengthVal').textContent='10';
   showStep(1);
 }
+// 入力タブ/保存済みタブを切り替える
 function switchTab(tab) {
   document.getElementById('tabInput').classList.toggle('active', tab==='input');
   document.getElementById('tabList').classList.toggle('active',  tab==='list');
@@ -1579,7 +1685,9 @@ function switchTab(tab) {
 // ══════════════════════════════════════
 // トースト
 // ══════════════════════════════════════
+// トースト通知の自動非表示タイマー
 let toastTimer;
+// 画面下部にトースト通知を表示する
 function showToast(msg, type) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -1600,6 +1708,7 @@ updateProgress();
 updateBadge();
 document.getElementById('listTab').style.display = 'none';
 
+// ダブルタップズーム防止用タイムスタンプ
 let lastTouchEnd = 0;
 document.addEventListener('touchend', function(e) {
   const now = Date.now();
@@ -1622,6 +1731,7 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
+// 現在のステップを自動で次へ進める
 function advanceFromCurrentStep() {
   if (step === 8) { tryNextStep8(); return; }
   // ★ 電源ステップ（9）の次へ
@@ -1642,8 +1752,10 @@ function advanceFromCurrentStep() {
 // ══════════════════════════════════════
 // 場所検索・距離計算（Google Maps Places Autocomplete）
 // ══════════════════════════════════════
+// Google Maps Autocompleteで選択中の場所オブジェクト
 let selectedPlace = null;
 
+// Google Maps Places Autocomplete を初期化し入力欄に紐付ける
 function initAutocomplete() {
   const input = document.getElementById('siteName');
   if (!input || typeof google === 'undefined') return;
@@ -1698,12 +1810,14 @@ function initAutocomplete() {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+// 選択場所の都道府県名を返す
 function getPrefecture(place) {
   const comps = place.address_components || [];
   const pref = comps.find(c => c.types.includes('administrative_area_level_1'));
   return pref ? pref.long_name : null;
 }
 
+// 都道府県に対応する担当拠点の配列を返す
 function getTargetOffices(prefecture) {
   if (!prefecture) return OFFICES; // 不明なら全拠点
 
@@ -1720,6 +1834,7 @@ function getTargetOffices(prefecture) {
   return matched;
 }
 
+// Autocompleteで場所が選択されたときの処理（距離計算・Step6スキップ）
 function onPlaceSelected(place) {
   selectedPlace = place;
   const resultEl = document.getElementById('locationResult');
@@ -1738,6 +1853,7 @@ function onPlaceSelected(place) {
   calcDistanceMulti(place, offices, resultEl);
 }
 
+// 複数拠点から現場までの距離をDistance Matrix APIで一括取得し表示する
 function calcDistanceMulti(place, offices, resultEl) {
   const service = new google.maps.DistanceMatrixService();
   service.getDistanceMatrix({
@@ -1810,6 +1926,7 @@ function calcDistanceMulti(place, offices, resultEl) {
 // ══════════════════════════════════════
 // 交通費計算
 // ══════════════════════════════════════
+// 距離・日数から交通費の概算テキストを生成する
 // days: 作業日数（nullの場合は1日として計算）
 function calcTransportLabel(distKm, distM, days) {
   if (distM <= 20000) return '不要（目安）';
@@ -1831,6 +1948,7 @@ function calcTransportLabel(distKm, distM, days) {
 // ══════════════════════════════════════
 // Step 6：住所入力→ジオコード→距離計算
 // ══════════════════════════════════════
+// Step6の「次へ」処理（住所入力時はジオコーディングして距離計算）
 function next6WithGeocode() {
   const addrText = (document.getElementById('areaDetail') && document.getElementById('areaDetail').value || '').trim();
   if (!addrText) {
@@ -1874,6 +1992,7 @@ function next6WithGeocode() {
   });
 }
 
+// コールバック付きの複数拠点距離計算（Step6ジオコーディング後に使用）
 // calcDistanceMulti のコールバック付き版
 function calcDistanceMultiThen(place, offices, callback) {
   const service = new google.maps.DistanceMatrixService();

@@ -1,6 +1,7 @@
 // ══════════════════════════════════════
 // 概算見積計算
 // ══════════════════════════════════════
+// currentReport を受け取り工事費の明細と合計を計算して返す
 function calcEstimate(r) {
   const lines = [];
   let total = 0;
@@ -186,10 +187,12 @@ function calcEstimate(r) {
   };
 }
 
+// 数値を円表示（¥1,000形式）にフォーマットする
 function fmtYen(n) {
   return '¥' + n.toLocaleString('ja-JP');
 }
 
+// 概算見積セクションを計算結果で描画する
 function renderEstimate(r) {
   const est = calcEstimate(r);
   const sec = document.getElementById('estimateSection');
@@ -241,6 +244,7 @@ function renderEstimate(r) {
   dlBtn.style.display = 'block';
 }
 
+// officeDistances と作業日数から交通費参考行を生成する
 function buildTransportRows(r) {
   const dists = r.officeDistances || [];
   if (!dists.length) return [];
@@ -252,6 +256,7 @@ function buildTransportRows(r) {
   });
 }
 
+// 見積をダウンロード用のテキスト形式に変換する
 function buildEstimateText(r) {
   const est = calcEstimate(r);
   const lines = [
@@ -289,6 +294,7 @@ function buildEstimateText(r) {
   return lines.join('\n');
 }
 
+// 見積テキストを .txt ファイルでダウンロードする
 function downloadEstimate() {
   if (!currentReport) return;
   const text = buildEstimateText(currentReport);
