@@ -8,33 +8,36 @@ function calcEstimate(r) {
   let hasRange = false;
   let rangeMin = 0, rangeMax = 0;
 
-  // カメラ台数集計（IPカメラ＋ステレオカメラ）
+  // カメラ台数集計（グループから算出、fallbackとしてcameraCountsも使う）
+  const groups = r.powerGroups || [];
   const counts = r.cameraCounts || {};
-  const ipCnt     = (counts['IPカメラ'] || 0) + (counts['ip'] || 0);
-  const sterCnt   = (counts['ステレオカメラ'] || 0) + (counts['stereo'] || 0);
+  const ipCnt     = groups.reduce((s, g) => s + (g.camIP || 0), 0)
+                  || (counts['IPカメラ'] || 0) + (counts['ip'] || 0);
+  const sterCnt   = groups.reduce((s, g) => s + (g.camStereo || 0), 0)
+                  || (counts['ステレオカメラ'] || 0) + (counts['stereo'] || 0);
   const camTotal  = ipCnt + sterCnt;
   const sysCount  = r.systemCount || 1;
 
   if (camTotal > 0) {
-    // 基本設置工事費
-    const base = 65000 * sysCount;
-    lines.push({ label: `基本設置工事費（${sysCount}システム）`, val: base });
+    // 基本設置工事費（1システム分固定）
+    const base = 65000;
+    lines.push({ label: `基本設置工事費`, val: base });
     total += base;
 
+    // 追加システム費（2台目以降）
+    const sysExtra = Math.max(0, sysCount - 1);
+    if (sysExtra > 0) {
+      const sysFee = sysExtra * 20000;
+      lines.push({ label: `システム追加費（${sysExtra}台 × ¥20,000）`, val: sysFee });
+      total += sysFee;
+    }
+
     // 追加カメラ費（4台目以降）
-    const extraCam = Math.max(0, camTotal - (3 * sysCount));
+    const extraCam = Math.max(0, camTotal - 3);
     if (extraCam > 0) {
       const extraFee = extraCam * 15000;
       lines.push({ label: `追加カメラ工事費（${extraCam}台 × ¥15,000）`, val: extraFee });
       total += extraFee;
-    }
-
-    // システム追加費（PoE 3ポート超過）
-    const sysExtra = Math.max(0, Math.ceil(camTotal / 3) - sysCount);
-    if (sysExtra > 0) {
-      const sysFee = sysExtra * 20000;
-      lines.push({ label: `システム追加費（${sysExtra}回 × ¥20,000）`, val: sysFee });
-      total += sysFee;
     }
   }
 
