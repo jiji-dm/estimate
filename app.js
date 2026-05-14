@@ -1655,8 +1655,21 @@ function saveCardEdit(rid) {
 function downloadFromList(id) {
   const r = getSaved().find(x => x.id === id);
   if (!r) return;
+  // .txt 書き出し
   dl(buildText(r), getFileName(r));
-  showToast('ファイルを書き出しました！', 'green');
+  // .json 書き出し
+  const sn = (r.siteName || '現場').replace(/[\\\/:\*\?"<>\|]/g,'_');
+  let dateStr = 'nodate';
+  if (r.createdAt) {
+    const parts = r.createdAt.replace(/\//g,'-').split('-');
+    if (parts.length === 3) dateStr = parts[0] + parts[1].padStart(2,'0') + parts[2].padStart(2,'0');
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }));
+  a.download = dateStr + '_' + sn + '_data.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('.txt と .json を書き出しました！', 'green');
 }
 
 // ══════════════════════════════════════
