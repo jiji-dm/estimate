@@ -19,7 +19,6 @@ function calcEstimate(r) {
   const sysCount  = r.systemCount || 1;
 
   if (camTotal > 0) {
-    // 各グループの「sys1相当の無料枠候補値」を算出
     // グループ内ではカメラがプール（システム別ではない）ため、count>=2のときは
     // ceil(カメラ数 / システム数) でそのグループのsys1のカメラ数を推定する。
     // 上限は1システムあたりの最大接続数3台。

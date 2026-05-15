@@ -51,21 +51,19 @@ const OFFICES = [
 ];
 
 // 総ステップ数
-const TOTAL = 17;
+const TOTAL = 16;
 // 選択可能な機器種別の定義（キー名・アイコン）
 const DEVICE_DEFS = [
   { key: 'IPカメラ',     icon: '📷' },
   { key: 'ステレオカメラ', icon: '📸' },
   { key: 'サイネージ',   icon: '🖥️' },
   { key: 'Lidar',       icon: '📡' },
-  { key: 'AirKnock',    icon: '💨' },
 ];
 
 // アプリ全体の状態変数（step:現在ステップ / d:入力値 / kosoMode:高所作業 / tokuMode:特記事項 / currentReport:生成済みレポート / modalReport:モーダル表示中レポート）
 let step = 1, d = {}, kosoMode = null, tokuMode = null, currentReport = null, modalReport = null;
 // d の初期値設定
 d.systemCount  = 1;
-d.cameraCounts = {};
 d.armData      = {};
 d.dateData = { single:{mode:'confirm'}, install:{mode:'confirm'}, remove:{mode:'confirm'} };
 
@@ -146,52 +144,62 @@ let powerGid = 0;
 
 // 電源供給ステップの初期化（グループがなければ1件追加）
 function initPowerStep() {
+  syncSystemTotal();
   const sysTotal = d.systemCount || 1;
-  document.getElementById('powerSysTotalLabel').textContent = sysTotal;
-  document.getElementById('powerTotalNum').textContent = sysTotal;
+  const elTotal = document.getElementById('powerTotalNum');
+  if (elTotal) elTotal.textContent = sysTotal;
   if (powerGroups.length === 0) addPowerGroup();
   renderPowerGroups();
 }
 
+// グループ合計のシステム台数を d.systemCount に同期する
+function syncSystemTotal() {
+  d.systemCount = Math.max(1, powerGroups.reduce(function(s,g){return s+(g.count||0);}, 0));
+}
+
 // 電源供給グループを1件追加する
 function addPowerGroup() {
-  const sysTotal = d.systemCount || 1;
-  const assigned = powerGroups.reduce((s,g) => s+g.count, 0);
-  const remain = Math.max(1, sysTotal - assigned);
   powerGroups.push({
     id: ++powerGid,
     groupName: '',
-    count: Math.min(remain, remain),
+    count: 1,
     power: null,
     distMode: '1m以内', distVal: 1,
     newType: null,
     newDistMode: '10m以下', newDistVal: 10,
     pipe: null, pipeType: null,
     open: true,
+    deviceType: 'camera',
     camIP: 0,
     camStereo: 0,
     armData: {},
+    memo: '',
   });
-  renderPowerGroups();
+  syncSystemTotal();
+  if (document.getElementById('groupCamArmList')) renderGroupCamArmList();
+  if (document.getElementById('powerGroupList')) renderPowerGroups();
 }
 
 // 電源供給グループ一覧をDOMに描画する
 function renderPowerGroups() {
+  var listEl = document.getElementById('powerGroupList');
+  if (!listEl) return;
+  syncSystemTotal();
   var sysTotal = d.systemCount || 1;
-  var assigned = powerGroups.reduce(function(s,g){return s+g.count;}, 0);
-  document.getElementById('powerAssignedNum').textContent = assigned;
+  var assignedEl = document.getElementById('powerAssignedNum');
+  if (assignedEl) assignedEl.textContent = sysTotal;
+  var totalEl = document.getElementById('powerTotalNum');
+  if (totalEl) totalEl.textContent = sysTotal;
   var badge = document.getElementById('powerStatusBadge');
-  var nextBtn = document.getElementById('next11');
-  var allDone = assigned === sysTotal && powerGroups.every(function(g){return isPowerGroupComplete(g);});
+  var nextBtn = document.getElementById('next12');
+  var allDone = powerGroups.length > 0 && powerGroups.every(function(g){return isPowerGroupComplete(g);});
   if (allDone) {
-    badge.className = 'arm-status-badge ok'; badge.textContent = '✓ 完了';
+    if (badge) { badge.className = 'arm-status-badge ok'; badge.textContent = '✓ 完了'; }
     if (nextBtn) nextBtn.disabled = false;
   } else {
-    badge.className = 'arm-status-badge warn';
-    badge.textContent = assigned < sysTotal ? '残り '+(sysTotal-assigned)+' 台' : '未入力あり';
+    if (badge) { badge.className = 'arm-status-badge warn'; badge.textContent = '未入力あり'; }
     if (nextBtn) nextBtn.disabled = true;
   }
-  var listEl = document.getElementById('powerGroupList');
   listEl.innerHTML = '';
   powerGroups.forEach(function(g, i) {
     var node = buildPowerGroupDOM(g, i, sysTotal);
@@ -420,32 +428,63 @@ function pgSet(id, key, val) {
 function pgSetGroupName(id, val) {
   const g = powerGroups.find(x => x.id===id); if(!g) return;
   g.groupName = val;
-  // ヘッダータイトルだけリアルタイム更新（再描画なし）
-  const card = document.querySelector('.power-group-card .power-group-title');
-  // カード全体を再描画せずタイトルのみ更新
-  const cards = document.getElementById('powerGroupList').querySelectorAll('.power-group-card');
-  powerGroups.forEach(function(pg, i) {
-    if (pg.id === id && cards[i]) {
-      var titleEl = cards[i].querySelector('.power-group-title');
-      if (titleEl) titleEl.textContent = (val && val.trim()) ? val.trim() : 'システム ' + pg.count + '台';
+  // タイトルだけリアルタイム更新（再描画なし）
+  document.querySelectorAll('.power-group-card').forEach(function(card) {
+    var titleEl = card.querySelector('.power-group-title');
+    if (titleEl && card.dataset && card.dataset.gid == String(id)) {
+      titleEl.textContent = (val && val.trim()) ? val.trim() : ('グループ ' + (powerGroups.findIndex(x=>x.id===id)+1));
     }
   });
 }
-// 電源グループの数値項目を増減する
+// グループのメモを更新する
+function pgSetMemo(id, val) {
+  const g = powerGroups.find(x => x.id===id); if(!g) return;
+  g.memo = val;
+}
+// グループのデバイス種別を切り替える
+function pgSetDeviceType(id, type) {
+  const g = powerGroups.find(x => x.id===id); if(!g) return;
+  g.deviceType = type;
+  if (type !== 'camera') {
+    g.camIP = 0;
+    g.camStereo = 0;
+    g.armData = {};
+  }
+  renderGroupCamArmList();
+}
+// グループの数値項目を増減する（count, distVal, newDistVal）
 function pgChange(id, key, delta) {
   const g = powerGroups.find(x => x.id===id); if(!g) return;
   const min = key==='newDistVal' ? 10 : 1;
   g[key] = Math.max(min, (g[key]||min) + delta);
-  renderPowerGroups();
+  if (key === 'count') {
+    if (g.deviceType === 'camera') {
+      // カメラ＋アームの合計が新しい上限を超える場合は調整
+      var maxCam = g.count * 3;
+      while ((g.camIP || 0) + (g.camStereo || 0) > maxCam) {
+        if ((g.camStereo || 0) > 0) g.camStereo--;
+        else if ((g.camIP || 0) > 0) g.camIP--;
+        else break;
+      }
+    }
+    syncSystemTotal();
+  }
+  if (document.getElementById('groupCamArmList')) renderGroupCamArmList();
+  if (document.getElementById('powerGroupList')) renderPowerGroups();
 }
-// 電源グループの開閉状態を切り替える
+// グループの開閉状態を切り替える
 function pgToggle(id) {
   const g = powerGroups.find(x => x.id===id); if(!g) return;
-  g.open = !g.open; renderPowerGroups();
+  g.open = !g.open;
+  if (document.getElementById('groupCamArmList')) renderGroupCamArmList();
+  if (document.getElementById('powerGroupList')) renderPowerGroups();
 }
-// 電源グループを削除する
+// グループを削除する
 function pgDelete(id) {
-  powerGroups = powerGroups.filter(x => x.id!==id); renderPowerGroups();
+  powerGroups = powerGroups.filter(x => x.id!==id);
+  syncSystemTotal();
+  if (document.getElementById('groupCamArmList')) renderGroupCamArmList();
+  if (document.getElementById('powerGroupList')) renderPowerGroups();
 }
 // 設置場所（屋内/屋外）を選択しポール設置セクションの表示を切り替える
 function pickLocation(btn, val) {
@@ -685,7 +724,7 @@ function getDateFileStr() {
 // プログレスバーと現在ステップ番号を更新する
 function updateProgress() {
   document.getElementById('progressFill').style.width = ((step-1)/TOTAL*100) + '%';
-  document.getElementById('progressNum').textContent = String(step).padStart(2,'0') + ' / 17';
+  document.getElementById('progressNum').textContent = String(step).padStart(2,'0') + ' / ' + String(TOTAL).padStart(2,'0');
 }
 // 指定ステップを表示する（スキップステップは自動スルー）
 function showStep(n) {
@@ -694,12 +733,13 @@ function showStep(n) {
   if (t) t.classList.add('active');
   updateProgress();
   if (n === 3) buildDateStep();
-  if (n === 8) buildDeviceList();
-  if (n === 9) initGroupArmStep();
-  if (n === 11) initPowerStep();
-  if (n === 12) buildWorkStep();
+  if (n === 8) initGroupArmStep();
+  if (n === 12) initPowerStep();
+  if (n === 13) buildWorkStep();
+  // 新Step9（アーム手配）：すべて「なし」ならスキップ
+  if (n === 9 && isAllNoArm()) { step=10; showStep(10); return; }
+  // 新Step15（廃材処理）：設置工事ならスキップ
   if (n === 15 && d.kojiType === '設置') { step=16; showStep(16); return; }
-  if (n === 16 && isAllNoArm()) { step=17; showStep(17); return; }
 }
 // アーム取付がすべて「なし」か判定する（グループarmDataを優先チェック）
 function isAllNoArm() {
@@ -760,126 +800,51 @@ function pick(btn, key, val) {
   }
 }
 
-// ══════════════════════════════════════
-// システム台数
-// ══════════════════════════════════════
-// システム台数を増減する
-function sysCountChange(delta) {
-  d.systemCount = Math.max(1, (d.systemCount||1) + delta);
-  document.getElementById('sysCountVal').textContent = d.systemCount;
-  document.getElementById('sysMaxCam').textContent = d.systemCount * 3;
-  updateCameraTotal();
-}
-
-// ══════════════════════════════════════
-// デバイスリスト（Step8）
-// ══════════════════════════════════════
-// 機器選択リストをDOMに構築する
-function buildDeviceList() {
-  const list = document.getElementById('deviceList');
-  list.innerHTML = DEVICE_DEFS.map(({ key, icon }) => {
-    if (!d.cameraCounts[key]) d.cameraCounts[key] = 0;
-    const sel = d.cameraCounts[key] > 0;
-    return `
-    <div class="device-row${sel?' selected':''}" id="devRow_${key.replace(/\s/g,'_')}" onclick="toggleDevice('${key}')">
-      <div class="device-row-left">
-        <div class="device-icon">${icon}</div>
-        <div class="device-name">${key}</div>
-      </div>
-      <div class="device-count-ctrl" onclick="event.stopPropagation()">
-        <button class="cnt-btn" onclick="devCntChange('${key}',-1)">−</button>
-        <div class="device-cnt" id="devCnt_${key.replace(/\s/g,'_')}">${d.cameraCounts[key]||0}</div>
-        <button class="cnt-btn" onclick="devCntChange('${key}',1)">＋</button>
-      </div>
-    </div>`;
-  }).join('');
-  updateCameraTotal();
-}
-
-// 機器種別の選択状態をトグルする
-function toggleDevice(key) {
-  const id = key.replace(/\s/g,'_');
-  const row = document.getElementById('devRow_'+id);
-  if (!row) return;
-  const isSel = row.classList.contains('selected');
-  if (isSel) {
-    d.cameraCounts[key] = 0;
-    row.classList.remove('selected');
-    document.getElementById('devCnt_'+id).textContent = 0;
-  } else {
-    d.cameraCounts[key] = 1;
-    row.classList.add('selected');
-    document.getElementById('devCnt_'+id).textContent = 1;
-  }
-  updateCameraTotal();
-}
-
-// 機器の台数を増減する
-function devCntChange(key, delta) {
-  const id = key.replace(/\s/g,'_');
-  const row = document.getElementById('devRow_'+id);
-  const cur = d.cameraCounts[key] || 0;
-  const max = (d.systemCount||1) * 3;
-  const totalOther = getTotalCameras() - cur;
-  let next = cur + delta;
-  if (next < 0) next = 0;
-  if (delta > 0 && totalOther + next > max) {
-    showToast('システム上限（' + max + '台）に達しています', 'red');
-    return;
-  }
-  d.cameraCounts[key] = next;
-  if (next === 0) row && row.classList.remove('selected');
-  else row && row.classList.add('selected');
-  document.getElementById('devCnt_'+id).textContent = next;
-  updateCameraTotal();
-}
-
-// IPカメラ＋ステレオカメラの合計台数を返す（グループデータ優先、fallbackはcameraCounts）
+// IPカメラ＋ステレオカメラの合計台数を返す（グループデータから集計）
 function getTotalCameras() {
-  const fromGroups = powerGroups.reduce((s, g) => s + (g.camIP||0) + (g.camStereo||0), 0);
-  if (fromGroups > 0) return fromGroups;
-  return DEVICE_DEFS.reduce((s, { key }) => s + (d.cameraCounts[key]||0), 0);
+  return powerGroups.reduce((s, g) => s + (g.camIP||0) + (g.camStereo||0), 0);
 }
 
-// カメラ合計台数表示を更新する
-function updateCameraTotal() {
-  const total = getTotalCameras();
-  const max   = (d.systemCount||1) * 3;
-  const row   = document.getElementById('camTotalRow');
-  const numEl = document.getElementById('camTotalVal');
-  const stEl  = document.getElementById('camTotalStatus');
-  const next8btn = document.getElementById('next8');
-  const errEl = document.getElementById('sysErrorMsg');
+// 統合Step8 のバリデーション結果を返す
+//   { ok: bool, issues: [string], summary: {sys, cam, signage, lidar} }
+function validateGroupsForStep8() {
+  var issues = [];
+  var sys = 0, cam = 0, signage = 0, lidar = 0;
+  if (powerGroups.length === 0) {
+    issues.push('グループを1つ以上追加してください');
+  }
+  powerGroups.forEach(function(g, i) {
+    var label = (g.groupName && g.groupName.trim()) ? '「'+g.groupName.trim()+'」' : ('グループ'+(i+1));
+    sys += (g.count || 0);
+    if ((g.count || 0) < 1) {
+      issues.push(label + '：システム台数が0です');
+    }
+    if (g.deviceType === 'camera') {
+      var c = (g.camIP||0) + (g.camStereo||0);
+      var armT = (g.armData||{}).wall||0;
+      armT += (g.armData||{}).pole||0;
+      armT += (g.armData||{}).ceil||0;
+      armT += (g.armData||{}).none||0;
+      cam += c;
+      if (c === 0) issues.push(label + '：カメラ台数を入力してください');
+      else if (c > g.count * 3) issues.push(label + '：カメラ台数がシステム上限('+(g.count*3)+'台)を超えています');
+      else if (armT !== c) issues.push(label + '：アーム合計('+armT+')とカメラ合計('+c+')が一致しません');
+    } else if (g.deviceType === 'signage') {
+      signage += g.count || 0;
+    } else if (g.deviceType === 'lidar') {
+      lidar += g.count || 0;
+    }
+  });
+  return { ok: issues.length === 0, issues: issues, summary: { sys: sys, cam: cam, signage: signage, lidar: lidar } };
+}
 
-  if (total === 0) {
-    if (row) row.style.display = 'none';
-    if (next8btn) next8btn.disabled = true;
-    if (errEl) errEl.style.display = 'none';
+// Step8 次へ処理（統合バリデーション）
+function tryNextStep8() {
+  var v = validateGroupsForStep8();
+  if (!v.ok) {
+    showToast(v.issues[0], 'red');
     return;
   }
-  if (row) row.style.display = 'flex';
-  if (numEl) numEl.textContent = total;
-
-  if (total > max) {
-    if (stEl) { stEl.className = 'cam-total-status err'; stEl.textContent = '⚠ システム台数（' + max + '台）を超えています'; }
-    if (next8btn) next8btn.disabled = true;
-    if (errEl) {
-      errEl.style.display = 'block';
-      errEl.textContent = 'システム ' + (d.systemCount||1) + '台（最大 ' + max + '台）に対して、カメラ合計が ' + total + '台あります。\nシステム台数を増やすか、カメラ台数を減らしてください。';
-    }
-  } else {
-    if (stEl) { stEl.className = 'cam-total-status ok'; stEl.textContent = '✓ OK'; }
-    if (next8btn) next8btn.disabled = false;
-    if (errEl) errEl.style.display = 'none';
-  }
-}
-
-// Step8（機器選択）の次へ処理（カメラ未選択時は警告）
-function tryNextStep8() {
-  const total = getTotalCameras();
-  const max   = (d.systemCount||1) * 3;
-  if (total === 0) { showToast('機器を1台以上選択してください', 'red'); return; }
-  if (total > max) { showToast('カメラ台数がシステム上限を超えています', 'red'); return; }
   step = 9; showStep(step);
 }
 
@@ -887,10 +852,8 @@ function tryNextStep8() {
 // グループ×カメラ×アーム設定ステップ（新Step9）
 // ══════════════════════════════════════
 
-// Step9初期化
+// 統合Step8 初期化
 function initGroupArmStep() {
-  const sysTotal = d.systemCount || 1;
-  document.getElementById('groupCamTotal').textContent = sysTotal * 3;
   if (powerGroups.length === 0) addPowerGroup();
   renderGroupCamArmList();
 }
@@ -899,29 +862,38 @@ function initGroupArmStep() {
 function renderGroupCamArmList() {
   const el = document.getElementById('groupCamArmList');
   if (!el) return;
-  const sysTotal = d.systemCount || 1;
   const frag = document.createDocumentFragment();
   powerGroups.forEach(function(g, i) {
-    frag.appendChild(buildGroupCamArmDOM(g, i, sysTotal));
+    frag.appendChild(buildGroupCamArmDOM(g, i));
   });
   el.innerHTML = '';
   el.appendChild(frag);
   updateGroupCamStatus();
 }
 
-// グループカード1件分のDOMを生成して返す
-function buildGroupCamArmDOM(g, idx, sysTotal) {
+// グループのデバイスサマリーテキストを返す（ヘッダー用）
+function groupDeviceSummary(g) {
+  if (g.deviceType === 'signage') return 'サイネージ×' + (g.count || 0) + '台';
+  if (g.deviceType === 'lidar')   return 'Lidar×' + (g.count || 0) + '台';
+  var cam = (g.camIP || 0) + (g.camStereo || 0);
+  var arm = (g.armData||{}).wall||0;
+  arm += (g.armData||{}).pole||0;
+  arm += (g.armData||{}).ceil||0;
+  arm += (g.armData||{}).none||0;
+  return 'sys' + (g.count||0) + '台・cam' + cam + '台・arm' + arm + '/' + cam;
+}
+
+// グループカード1件分のDOMを生成して返す（統合UI：種別ラジオ・メモ・カメラ＝アーム一致チェック）
+function buildGroupCamArmDOM(g, idx) {
+  var deviceType = g.deviceType || 'camera';
   var totalCam = (g.camIP || 0) + (g.camStereo || 0);
   var armData = g.armData || {};
   var armTotal = (armData.wall || 0) + (armData.pole || 0) + (armData.ceil || 0) + (armData.none || 0);
-  var summary = 'IPカメラ' + (g.camIP || 0) + '台・ステレオ' + (g.camStereo || 0) + '台';
-  if (totalCam > 0) {
-    summary += '　アーム合計' + armTotal + '/' + totalCam + '台';
-  }
   var displayTitle = (g.groupName && g.groupName.trim()) ? g.groupName.trim() : 'グループ ' + (idx + 1);
 
   var wrap = document.createElement('div');
   wrap.className = 'power-group-card';
+  wrap.dataset.gid = g.id;
 
   var header = document.createElement('div');
   header.className = 'power-group-header';
@@ -929,7 +901,7 @@ function buildGroupCamArmDOM(g, idx, sysTotal) {
     '<div style="display:flex;align-items:center;gap:10px;">' +
       '<div class="power-group-num">' + (idx + 1) + '</div>' +
       '<div><div class="power-group-title">' + displayTitle + '</div>' +
-      '<div class="power-group-summary">' + summary + '</div></div>' +
+      '<div class="power-group-summary">' + groupDeviceSummary(g) + '</div></div>' +
     '</div>' +
     '<div style="display:flex;align-items:center;gap:8px;">' +
       '<button class="delete-btn" id="gcadel_' + g.id + '">🗑️</button>' +
@@ -959,98 +931,139 @@ function buildGroupCamArmDOM(g, idx, sysTotal) {
   body.appendChild(nameRow);
 
   // システム台数
-  var assigned = powerGroups.reduce(function(s, x) { return s + x.count; }, 0);
-  var others = assigned - g.count;
-  var canInc = others + g.count + 1 <= sysTotal;
+  var countLabel = deviceType === 'camera' ? '📦 システム台数' : '📦 システム台数（＝ ' + (deviceType === 'signage' ? 'サイネージ' : 'Lidar') + '台数）';
   var countRow = document.createElement('div');
   countRow.className = 'power-count-row';
   countRow.innerHTML =
-    '<div class="power-count-label">📦 システム台数</div>' +
+    '<div class="power-count-label">' + countLabel + '</div>' +
     '<div class="camera-count-ctrl">' +
       '<button class="cnt-btn" id="gcam_' + g.id + '"' + (g.count <= 1 ? ' disabled' : '') + '>−</button>' +
       '<div class="cnt-val" style="font-size:18px;">' + g.count + '</div>' +
-      '<button class="cnt-btn" id="gcap_' + g.id + '"' + (!canInc ? ' disabled' : '') + '>＋</button>' +
+      '<button class="cnt-btn" id="gcap_' + g.id + '">＋</button>' +
       '<span style="font-size:11px;color:var(--text-dim);">台</span>' +
     '</div>';
   countRow.querySelector('#gcam_' + g.id).addEventListener('click', function() { pgChange(g.id, 'count', -1); });
   countRow.querySelector('#gcap_' + g.id).addEventListener('click', function() { pgChange(g.id, 'count', 1); });
   body.appendChild(countRow);
 
-  // カメラ台数セクション
-  var camLabel = document.createElement('div');
-  camLabel.className = 'arm-sub-label';
-  camLabel.style.cssText = 'margin:12px 0 8px;';
-  camLabel.textContent = '📷 カメラ台数';
-  body.appendChild(camLabel);
+  // デバイス種別ラジオ
+  var typeLabel = document.createElement('div');
+  typeLabel.className = 'arm-sub-label';
+  typeLabel.style.cssText = 'margin:12px 0 8px;';
+  typeLabel.textContent = '📷 機器種別';
+  body.appendChild(typeLabel);
 
-  // IPカメラ
-  var ipRow = document.createElement('div');
-  ipRow.className = 'power-count-row';
-  ipRow.innerHTML =
-    '<div class="power-count-label">IPカメラ</div>' +
-    '<div class="camera-count-ctrl">' +
-      '<button class="cnt-btn" id="gcip_m_' + g.id + '"' + ((g.camIP || 0) <= 0 ? ' disabled' : '') + '>−</button>' +
-      '<div class="cnt-val" style="font-size:18px;" id="gcip_v_' + g.id + '">' + (g.camIP || 0) + '</div>' +
-      '<button class="cnt-btn" id="gcip_p_' + g.id + '">＋</button>' +
-      '<span style="font-size:11px;color:var(--text-dim);">台</span>' +
-    '</div>';
-  ipRow.querySelector('#gcip_m_' + g.id).addEventListener('click', function() { pgCamChange(g.id, 'camIP', -1); });
-  ipRow.querySelector('#gcip_p_' + g.id).addEventListener('click', function() { pgCamChange(g.id, 'camIP', 1); });
-  body.appendChild(ipRow);
+  var typeRow = document.createElement('div');
+  typeRow.className = 'device-type-row';
+  var TYPES = [
+    { key: 'camera',  label: '📷 カメラ' },
+    { key: 'signage', label: '🖥️ サイネージ' },
+    { key: 'lidar',   label: '📡 Lidar' },
+  ];
+  typeRow.innerHTML = TYPES.map(function(t) {
+    return '<button class="device-type-btn ' + (deviceType === t.key ? 'selected' : '') + '" data-gid="' + g.id + '" data-type="' + t.key + '">' + t.label + '</button>';
+  }).join('');
+  typeRow.querySelectorAll('.device-type-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      pgSetDeviceType(parseInt(this.dataset.gid, 10), this.dataset.type);
+    });
+  });
+  body.appendChild(typeRow);
 
-  // ステレオカメラ
-  var sterRow = document.createElement('div');
-  sterRow.className = 'power-count-row';
-  sterRow.innerHTML =
-    '<div class="power-count-label">ステレオカメラ</div>' +
-    '<div class="camera-count-ctrl">' +
-      '<button class="cnt-btn" id="gcst_m_' + g.id + '"' + ((g.camStereo || 0) <= 0 ? ' disabled' : '') + '>−</button>' +
-      '<div class="cnt-val" style="font-size:18px;" id="gcst_v_' + g.id + '">' + (g.camStereo || 0) + '</div>' +
-      '<button class="cnt-btn" id="gcst_p_' + g.id + '">＋</button>' +
-      '<span style="font-size:11px;color:var(--text-dim);">台</span>' +
-    '</div>';
-  sterRow.querySelector('#gcst_m_' + g.id).addEventListener('click', function() { pgCamChange(g.id, 'camStereo', -1); });
-  sterRow.querySelector('#gcst_p_' + g.id).addEventListener('click', function() { pgCamChange(g.id, 'camStereo', 1); });
-  body.appendChild(sterRow);
+  if (deviceType === 'camera') {
+    // カメラ台数セクション
+    var camLabel = document.createElement('div');
+    camLabel.className = 'arm-sub-label';
+    camLabel.style.cssText = 'margin:12px 0 8px;';
+    camLabel.textContent = '📷 カメラ台数（上限 ' + (g.count * 3) + '台）';
+    body.appendChild(camLabel);
 
-  // アーム設定セクション（カメラ台数>0のとき表示）
-  if (totalCam > 0) {
-    var armLabel = document.createElement('div');
-    armLabel.className = 'arm-sub-label';
-    armLabel.style.cssText = 'margin:12px 0 8px;';
-    armLabel.textContent = '🔩 アーム取付方法・台数';
-    body.appendChild(armLabel);
-
-    var armKeys = [
-      { key: 'wall', label: '🔩 壁付け' },
-      { key: 'pole', label: '🏗️ ポール' },
-      { key: 'ceil', label: '⬆️ 天井' },
-      { key: 'none', label: '🚫 なし' },
-    ];
-    if (!g.armData) g.armData = {};
-    armKeys.forEach(function(ak) {
-      var armRow = document.createElement('div');
-      armRow.className = 'power-count-row';
-      var armCnt = g.armData[ak.key] || 0;
-      armRow.innerHTML =
-        '<div class="power-count-label">' + ak.label + '</div>' +
+    var maxCam = g.count * 3;
+    [
+      { key: 'camIP',     label: 'IPカメラ' },
+      { key: 'camStereo', label: 'ステレオカメラ' },
+    ].forEach(function(camDef) {
+      var row = document.createElement('div');
+      row.className = 'power-count-row';
+      var val = g[camDef.key] || 0;
+      var canInc = totalCam < maxCam;
+      row.innerHTML =
+        '<div class="power-count-label">' + camDef.label + '</div>' +
         '<div class="camera-count-ctrl">' +
-          '<button class="cnt-btn" id="ga_m_' + g.id + '_' + ak.key + '"' + (armCnt <= 0 ? ' disabled' : '') + '>−</button>' +
-          '<div class="cnt-val" style="font-size:18px;" id="ga_v_' + g.id + '_' + ak.key + '">' + armCnt + '</div>' +
-          '<button class="cnt-btn" id="ga_p_' + g.id + '_' + ak.key + '">＋</button>' +
+          '<button class="cnt-btn" id="gc_m_' + g.id + '_' + camDef.key + '"' + (val <= 0 ? ' disabled' : '') + '>−</button>' +
+          '<div class="cnt-val" style="font-size:18px;">' + val + '</div>' +
+          '<button class="cnt-btn" id="gc_p_' + g.id + '_' + camDef.key + '"' + (!canInc ? ' disabled' : '') + '>＋</button>' +
           '<span style="font-size:11px;color:var(--text-dim);">台</span>' +
         '</div>';
-      armRow.querySelector('#ga_m_' + g.id + '_' + ak.key).addEventListener('click', function() { pgArmCntChange(g.id, ak.key, -1); });
-      armRow.querySelector('#ga_p_' + g.id + '_' + ak.key).addEventListener('click', function() { pgArmCntChange(g.id, ak.key, 1); });
-      body.appendChild(armRow);
+      row.querySelector('#gc_m_' + g.id + '_' + camDef.key).addEventListener('click', function() { pgCamChange(g.id, camDef.key, -1); });
+      row.querySelector('#gc_p_' + g.id + '_' + camDef.key).addEventListener('click', function() { pgCamChange(g.id, camDef.key, 1); });
+      body.appendChild(row);
     });
 
-    // アーム合計表示
-    var armTotalRow = document.createElement('div');
-    armTotalRow.style.cssText = 'font-size:12px;color:var(--text-dim);padding:6px 0;text-align:right;';
-    armTotalRow.textContent = 'アーム合計 ' + armTotal + ' / ' + totalCam + ' 台';
-    body.appendChild(armTotalRow);
+    // アーム設定セクション（カメラ台数>0のとき表示）
+    if (totalCam > 0) {
+      var armLabel = document.createElement('div');
+      armLabel.className = 'arm-sub-label';
+      armLabel.style.cssText = 'margin:12px 0 8px;';
+      armLabel.textContent = '🔩 アーム取付方法・台数（カメラ合計と一致が必要）';
+      body.appendChild(armLabel);
+
+      var armKeys = [
+        { key: 'wall', label: '🔩 壁付け' },
+        { key: 'pole', label: '🏗️ ポール' },
+        { key: 'ceil', label: '⬆️ 天井' },
+        { key: 'none', label: '🚫 なし' },
+      ];
+      if (!g.armData) g.armData = {};
+      armKeys.forEach(function(ak) {
+        var armRow = document.createElement('div');
+        armRow.className = 'power-count-row';
+        var armCnt = g.armData[ak.key] || 0;
+        var canIncArm = armTotal < totalCam;
+        armRow.innerHTML =
+          '<div class="power-count-label">' + ak.label + '</div>' +
+          '<div class="camera-count-ctrl">' +
+            '<button class="cnt-btn" id="ga_m_' + g.id + '_' + ak.key + '"' + (armCnt <= 0 ? ' disabled' : '') + '>−</button>' +
+            '<div class="cnt-val" style="font-size:18px;">' + armCnt + '</div>' +
+            '<button class="cnt-btn" id="ga_p_' + g.id + '_' + ak.key + '"' + (!canIncArm ? ' disabled' : '') + '>＋</button>' +
+            '<span style="font-size:11px;color:var(--text-dim);">台</span>' +
+          '</div>';
+        armRow.querySelector('#ga_m_' + g.id + '_' + ak.key).addEventListener('click', function() { pgArmCntChange(g.id, ak.key, -1); });
+        armRow.querySelector('#ga_p_' + g.id + '_' + ak.key).addEventListener('click', function() { pgArmCntChange(g.id, ak.key, 1); });
+        body.appendChild(armRow);
+      });
+
+      // アーム合計表示（一致しなければ赤）
+      var match = armTotal === totalCam;
+      var armTotalRow = document.createElement('div');
+      armTotalRow.style.cssText = 'font-size:12px;padding:6px 0;text-align:right;color:' + (match ? 'var(--text-dim)' : '#e44');
+      armTotalRow.textContent = (match ? '✓ ' : '⚠️ ') + 'アーム合計 ' + armTotal + ' / カメラ合計 ' + totalCam + ' 台';
+      body.appendChild(armTotalRow);
+    }
+  } else {
+    // signage / lidar の概要表示
+    var infoRow = document.createElement('div');
+    infoRow.style.cssText = 'font-size:12px;color:var(--text-dim);padding:8px 0;';
+    var devName = deviceType === 'signage' ? 'サイネージ' : 'Lidar';
+    infoRow.textContent = '※ ' + devName + 'はシステム台数と同じ台数（' + g.count + '台）。アーム取付なし。';
+    body.appendChild(infoRow);
   }
+
+  // メモ欄
+  var memoLabel = document.createElement('div');
+  memoLabel.className = 'arm-sub-label';
+  memoLabel.style.cssText = 'margin:12px 0 6px;';
+  memoLabel.textContent = '📝 メモ（任意）';
+  body.appendChild(memoLabel);
+  var memoArea = document.createElement('textarea');
+  memoArea.className = 'text-input';
+  memoArea.rows = 2;
+  memoArea.placeholder = '機器詳細・特記事項など（任意）';
+  memoArea.style.cssText = 'font-size:13px;padding:9px 12px;margin-bottom:0;';
+  memoArea.id = 'gcmemo_' + g.id;
+  memoArea.value = g.memo || '';
+  memoArea.addEventListener('input', function() { pgSetMemo(g.id, this.value); });
+  body.appendChild(memoArea);
 
   wrap.appendChild(body);
   return wrap;
@@ -1073,33 +1086,26 @@ function pgArmCntChange(gid, armKey, delta) {
   renderGroupCamArmList();
 }
 
-// ステータスバーとStep9次へボタンを更新する
+// 統合Step8 ステータスバーと次へボタンを更新する
 function updateGroupCamStatus() {
-  const maxCam = (d.systemCount || 1) * 3;
-  const totalCam = powerGroups.reduce((s, g) => s + (g.camIP || 0) + (g.camStereo || 0), 0);
-  const el = document.getElementById('groupCamAssigned');
-  if (el) el.textContent = totalCam;
-  const badge = document.getElementById('groupCamBadge');
-  const next9btn = document.getElementById('next9');
-  if (totalCam > 0 && totalCam <= maxCam) {
-    if (badge) { badge.className = 'arm-status-badge ok'; badge.textContent = '✓ OK'; }
-    if (next9btn) next9btn.disabled = false;
-  } else if (totalCam > maxCam) {
-    if (badge) { badge.className = 'arm-status-badge warn'; badge.textContent = '上限超過'; }
-    if (next9btn) next9btn.disabled = true;
-  } else {
-    if (badge) { badge.className = 'arm-status-badge warn'; badge.textContent = '未設定'; }
-    if (next9btn) next9btn.disabled = true;
+  syncSystemTotal();
+  const v = validateGroupsForStep8();
+  const sumEl = document.getElementById('groupCamSummary');
+  if (sumEl) {
+    var parts = ['sys ' + v.summary.sys, 'カメラ ' + v.summary.cam];
+    if (v.summary.signage > 0) parts.push('サイネージ ' + v.summary.signage);
+    if (v.summary.lidar > 0)   parts.push('Lidar ' + v.summary.lidar);
+    sumEl.textContent = parts.join(' / ');
   }
-}
-
-// Step9次へバリデーション
-function tryNextStep9() {
-  const totalCam = powerGroups.reduce((s, g) => s + (g.camIP || 0) + (g.camStereo || 0), 0);
-  const maxCam = (d.systemCount || 1) * 3;
-  if (totalCam === 0) { showToast('カメラ台数を入力してください', 'red'); return; }
-  if (totalCam > maxCam) { showToast('カメラ台数がシステム上限を超えています', 'red'); return; }
-  step = 10; showStep(step);
+  const badge = document.getElementById('groupCamBadge');
+  const nextBtn = document.getElementById('next8');
+  if (v.ok) {
+    if (badge) { badge.className = 'arm-status-badge ok'; badge.textContent = '✓ OK'; }
+    if (nextBtn) nextBtn.disabled = false;
+  } else {
+    if (badge) { badge.className = 'arm-status-badge warn'; badge.textContent = v.issues[0]; }
+    if (nextBtn) nextBtn.disabled = true;
+  }
 }
 
 // ══════════════════════════════════════
@@ -1358,7 +1364,7 @@ function toggleKoso(mode) {
   document.getElementById('kosoYes').classList.toggle('selected',  mode==='yes');
   document.getElementById('kosoDetail').style.display = mode==='yes' ? 'block' : 'none';
   if (mode === 'none') { d.kosoEquip = []; d.kosoSupply = null; }
-  document.getElementById('next13').disabled = false;
+  document.getElementById('next14').disabled = false;
 }
 
 // 高所作業の使用機材を選択する
@@ -1388,7 +1394,7 @@ function toggleToku(mode) {
   document.getElementById('tokNone').classList.toggle('selected', mode==='none');
   document.getElementById('tokYes').classList.toggle('selected',  mode==='yes');
   document.getElementById('tokuDetail').style.display = mode==='yes' ? 'block' : 'none';
-  document.getElementById('next17').disabled = false;
+  document.getElementById('next16').disabled = false;
 }
 
 // ══════════════════════════════════════
@@ -1417,18 +1423,29 @@ function buildGroupSummaryText(groups) {
     var name = (g.groupName && g.groupName.trim())
       ? 'グループ' + (i + 1) + '「' + g.groupName.trim() + '」'
       : 'グループ' + (i + 1);
-    var camLines = [];
-    if (g.camIP    > 0) camLines.push('IPカメラ×' + g.camIP + '台');
-    if (g.camStereo > 0) camLines.push('ステレオカメラ×' + g.camStereo + '台');
-    var camStr = camLines.length ? camLines.join('・') : 'カメラなし';
-    var ad = g.armData || {};
-    var armLines = [];
-    if (ad.wall > 0) armLines.push('壁付け×' + ad.wall + '台');
-    if (ad.pole > 0) armLines.push('ポール×' + ad.pole + '台');
-    if (ad.ceil > 0) armLines.push('天井×' + ad.ceil + '台');
-    if (ad.none > 0) armLines.push('アームなし×' + ad.none + '台');
-    var armStr = armLines.length ? armLines.join('・') : '未設定';
-    return name + '（sys' + g.count + '台）\n　カメラ：' + camStr + '\n　アーム：' + armStr;
+    var deviceType = g.deviceType || 'camera';
+    var lines = [name + '（sys' + (g.count||0) + '台）'];
+    if (deviceType === 'camera') {
+      var camLines = [];
+      if (g.camIP    > 0) camLines.push('IPカメラ×' + g.camIP + '台');
+      if (g.camStereo > 0) camLines.push('ステレオカメラ×' + g.camStereo + '台');
+      var camStr = camLines.length ? camLines.join('・') : 'カメラなし';
+      var ad = g.armData || {};
+      var armLines = [];
+      if (ad.wall > 0) armLines.push('壁付け×' + ad.wall + '台');
+      if (ad.pole > 0) armLines.push('ポール×' + ad.pole + '台');
+      if (ad.ceil > 0) armLines.push('天井×' + ad.ceil + '台');
+      if (ad.none > 0) armLines.push('アームなし×' + ad.none + '台');
+      var armStr = armLines.length ? armLines.join('・') : '未設定';
+      lines.push('　機器：' + camStr);
+      lines.push('　アーム：' + armStr);
+    } else if (deviceType === 'signage') {
+      lines.push('　機器：サイネージ×' + (g.count||0) + '台');
+    } else if (deviceType === 'lidar') {
+      lines.push('　機器：Lidar×' + (g.count||0) + '台');
+    }
+    if (g.memo && g.memo.trim()) lines.push('　メモ：' + g.memo.trim());
+    return lines.join('\n');
   }).join('\n');
 }
 
@@ -1524,8 +1541,8 @@ ${poleLine}
 ${haizaiLine}
 
 【機器情報】
-システム台数：${r.systemCount}台（最大${r.systemCount*3}台接続可）
-${buildGroupSummaryText(r.powerGroups) || ('カメラ種類・台数：\n' + r.cameraText + '\n' + r.armText)}
+システム台数：${r.systemCount}台
+${buildGroupSummaryText(r.powerGroups) || '　（グループ未設定）'}
 ${armHandlingLine}
 
 【電源供給】
@@ -1555,13 +1572,17 @@ function generateReport() {
   let tokuLine = 'なし';
   if (tokuMode === 'yes') tokuLine = document.getElementById('tokuText').value || '詳細未入力';
 
+  syncSystemTotal();
   const ipTotal    = powerGroups.reduce((s, g) => s + (g.camIP || 0), 0);
   const sterTotal  = powerGroups.reduce((s, g) => s + (g.camStereo || 0), 0);
-  const cameraCounts = Object.assign({}, d.cameraCounts, {
-    'IPカメラ': ipTotal || (d.cameraCounts['IPカメラ'] || 0),
-    'ステレオカメラ': sterTotal || (d.cameraCounts['ステレオカメラ'] || 0),
-  });
-  const cameraTypeOther = document.getElementById('cameraTypeOther').value;
+  const signageTotal = powerGroups.reduce((s, g) => s + (g.deviceType === 'signage' ? (g.count||0) : 0), 0);
+  const lidarTotal   = powerGroups.reduce((s, g) => s + (g.deviceType === 'lidar'   ? (g.count||0) : 0), 0);
+  const cameraCounts = {
+    'IPカメラ': ipTotal,
+    'ステレオカメラ': sterTotal,
+    'サイネージ': signageTotal,
+    'Lidar': lidarTotal,
+  };
   const isKasetsu       = d.kojiType === '仮設';
   const workDate        = isKasetsu ? getDateText('install') : getDateText('single');
   const installDate     = getDateText('install');
@@ -1586,8 +1607,7 @@ function generateReport() {
     excavation:   d.excavation || '',
     poleFinish:   d.poleFinish || '',
     systemCount:  d.systemCount || 1,
-    cameraCounts, cameraTypeOther,
-    cameraText:   buildCameraText(cameraCounts, cameraTypeOther),
+    cameraCounts,
     armData:      JSON.parse(JSON.stringify(d.armData||{})),
     armText:      buildGroupArmText(powerGroups) || buildArmText(d.armData),
     wiring:       d.wiring || '未選択',
@@ -1708,7 +1728,7 @@ function loadFromJson(input) {
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
-      const r = JSON.parse(e.target.result);
+      const r = migrateReport(JSON.parse(e.target.result));
       if (!r || !r.siteName) throw new Error('invalid');
       showReport(r);
       switchTab('input');
@@ -1742,8 +1762,22 @@ function dl(text, filename) {
 // ══════════════════════════════════════
 // ローカルストレージ
 // ══════════════════════════════════════
+// 旧フォーマット（deviceType未設定）のレポートを新形式にマイグレーション
+function migrateReport(r) {
+  if (!r) return r;
+  (r.powerGroups || []).forEach(function(g) {
+    if (!g.deviceType) g.deviceType = 'camera';
+    if (g.memo == null) g.memo = '';
+  });
+  return r;
+}
 // localStorage から保存済みレポート一覧を取得する
-function getSaved() { try { return JSON.parse(localStorage.getItem('gencho_v4')) || []; } catch { return []; } }
+function getSaved() {
+  try {
+    var list = JSON.parse(localStorage.getItem('gencho_v4')) || [];
+    return list.map(migrateReport);
+  } catch { return []; }
+}
 // 保存済みレポート一覧を localStorage に保存する
 function setSaved(list) { localStorage.setItem('gencho_v4', JSON.stringify(list)); }
 // 指定IDのレポートを localStorage から削除する
@@ -2010,7 +2044,7 @@ function downloadModal() {
 // ══════════════════════════════════════
 // フォームと状態を全リセットして入力画面に戻る
 function resetAll() {
-  d = { systemCount:1, cameraCounts:{}, armData:{}, workPlan:{}, kosoEquip:[],
+  d = { systemCount:1, armData:{}, workPlan:{}, kosoEquip:[],
         dateData:{ single:{mode:'confirm'}, install:{mode:'confirm'}, remove:{mode:'confirm'} } };
   kosoMode = null; tokuMode = null; step = 1; currentReport = null;
   document.getElementById('stepsContainer').style.display = 'block';
@@ -2020,8 +2054,6 @@ function resetAll() {
   document.querySelectorAll('.next-btn[id]').forEach(b => b.disabled = true);
   document.getElementById('kosoDetail').style.display = 'none';
   document.getElementById('tokuDetail').style.display = 'none';
-  document.getElementById('sysCountVal').textContent = '1';
-  document.getElementById('sysMaxCam').textContent = '3';
   ['wall','pole','ceil','none'].forEach(k => {
     const card=document.getElementById('armCard_'+k), check=document.getElementById('armCheck_'+k), sub=document.getElementById('armSub_'+k);
     if(card) card.classList.remove('selected');
@@ -2066,7 +2098,6 @@ function showToast(msg, type) {
 // 初期化
 // ══════════════════════════════════════
 d.systemCount  = 1;
-d.cameraCounts = {};
 d.armData      = {};
 d.dateData     = { single:{mode:'confirm'}, install:{mode:'confirm'}, remove:{mode:'confirm'} };
 updateProgress();
