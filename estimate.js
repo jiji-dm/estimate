@@ -159,19 +159,40 @@ function calcEstimate(r) {
     total += remFee;
   }
 
-  // ポール新設費
-  if (r.poleNew === 'yes') {
-    lines.push({ label: `ポール新設費（基本）`, val: 313500 });
-    total += 313500;
-    // 掘削条件
-    const exc = r.excavation || '';
-    if (exc === 'アスファルト') {
-      lines.push({ label: `掘削費・アスファルト（約）`, val: 83500 });
-      total += 83500;
-    } else if (exc === 'コンクリート') {
-      lines.push({ label: `掘削費・コンクリート（約）`, val: 208750 });
-      total += 208750;
+  // ポール新設費（本数 × 種別ごとに加算）
+  if (r.poleNew === 'あり') {
+    // 旧形式（poleItems無し）の互換：excavation/poleFinish から1件合成
+    let items = Array.isArray(r.poleItems) ? r.poleItems.slice() : [];
+    if (items.length === 0 && (r.excavation || r.poleFinish)) {
+      items = [{ excavation: r.excavation || null, finish: r.poleFinish || null }];
     }
+    if (items.length === 0) items = [{ excavation: null, finish: null }];
+    const count = Math.max(items.length, r.poleCount || items.length || 1);
+    // まとめてモード（items が1件しかない）のときは count 本ぶんに展開
+    const expanded = (items.length === 1 && count > 1)
+      ? Array.from({ length: count }, function() { return items[0]; })
+      : items;
+
+    const POLE_BASE = 313500;
+    expanded.forEach(function(it, i) {
+      const tag = expanded.length > 1 ? ' #' + (i + 1) : '';
+      lines.push({ label: `ポール新設費（基本）${tag}`, val: POLE_BASE });
+      total += POLE_BASE;
+      if (it.excavation === 'アスファルト') {
+        lines.push({ label: `掘削費・アスファルト${tag}`, val: 83500 });
+        total += 83500;
+      } else if (it.excavation === 'コンクリ' || it.excavation === 'コンクリート') {
+        lines.push({ label: `掘削費・コンクリ${tag}`, val: 208750 });
+        total += 208750;
+      }
+      if (it.finish === 'アスファルト仕上げ') {
+        lines.push({ label: `アスファルト復旧${tag}`, val: 26000 });
+        total += 26000;
+      } else if (it.finish === '左官仕上げ') {
+        lines.push({ label: `コンクリートモルタル仕上げ復旧${tag}`, val: 50000 });
+        total += 50000;
+      }
+    });
   }
 
   // モール配管費（電源グループから集計）
