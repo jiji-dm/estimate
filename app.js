@@ -66,6 +66,9 @@ let step = 1, d = {}, kosoMode = null, tokuMode = null, currentReport = null, mo
 d.systemCount  = 1;
 d.armData      = {};
 d.dateData = { single:{mode:'confirm'}, install:{mode:'confirm'}, remove:{mode:'confirm'} };
+d.poleCount     = 1;
+d.poleBatchMode = true;
+d.poleItems     = [{ excavation: null, finish: null }];
 
 // ══════════════════════════════════════
 // カレンダー（複数インスタンス対応）
@@ -493,18 +496,121 @@ function pickLocation(btn, val) {
   d.location = val;
   const poleSection = document.getElementById('poleSection');
   if (poleSection) poleSection.style.display = val === '屋外' ? 'block' : 'none';
-  if (val === '屋内') { d.poleNew = null; d.excavation = null; d.poleFinish = null; }
+  if (val === '屋内') {
+    d.poleNew = null;
+    d.poleCount = 1;
+    d.poleBatchMode = true;
+    d.poleItems = [{ excavation: null, finish: null }];
+  }
   const nb = document.getElementById('next5');
   if (nb) nb.disabled = false;
 }
-// ポール新設の有無を選択し掘削セクションの表示を切り替える
+// ポール新設の有無を選択し詳細セクションの表示を切り替える
 function pickPole(btn, val) {
   btn.closest('.btn-grid').querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
   d.poleNew = val;
-  const excSec = document.getElementById('excavationSection');
-  if (excSec) excSec.style.display = val === 'あり' ? 'block' : 'none';
-  if (val === 'なし') { d.excavation = null; d.poleFinish = null; }
+  const cfg = document.getElementById('poleConfigSection');
+  if (cfg) cfg.style.display = val === 'あり' ? 'block' : 'none';
+  if (val === 'なし') {
+    d.poleCount = 1;
+    d.poleBatchMode = true;
+    d.poleItems = [{ excavation: null, finish: null }];
+  } else if (val === 'あり') {
+    if (!Array.isArray(d.poleItems) || d.poleItems.length === 0) {
+      d.poleItems = [{ excavation: null, finish: null }];
+    }
+    if (!d.poleCount || d.poleCount < 1) d.poleCount = 1;
+    if (typeof d.poleBatchMode !== 'boolean') d.poleBatchMode = true;
+    renderPoleEditor();
+  }
+}
+
+// ポール本数を増減する（最低1本）
+function pcntChange(delta) {
+  const next = Math.max(1, (d.poleCount || 1) + delta);
+  d.poleCount = next;
+  // 個別モードのときは items の長さを揃える
+  if (!d.poleBatchMode) {
+    if (d.poleItems.length < next) {
+      while (d.poleItems.length < next) d.poleItems.push({ excavation: null, finish: null });
+    } else if (d.poleItems.length > next) {
+      d.poleItems.length = next;
+    }
+  }
+  renderPoleEditor();
+}
+
+// まとめて/個別 モード切替
+function setPoleBatchMode(batch) {
+  d.poleBatchMode = !!batch;
+  if (batch) {
+    // 個別→まとめて：先頭を残す（他の入力は破棄）
+    d.poleItems = [d.poleItems[0] || { excavation: null, finish: null }];
+  } else {
+    // まとめて→個別：先頭の内容を本数分に複製
+    const tmpl = d.poleItems[0] || { excavation: null, finish: null };
+    const n = Math.max(1, d.poleCount || 1);
+    const arr = [];
+    for (let i = 0; i < n; i++) arr.push({ excavation: tmpl.excavation, finish: tmpl.finish });
+    d.poleItems = arr;
+  }
+  renderPoleEditor();
+}
+
+// ポール1本分の選択を更新
+function pickPoleItem(idx, key, val) {
+  if (!d.poleItems[idx]) d.poleItems[idx] = { excavation: null, finish: null };
+  d.poleItems[idx][key] = val;
+  renderPoleEditor();
+}
+
+// ポール編集UIを描画する（本数カウンタ・モード・行リスト）
+function renderPoleEditor() {
+  const cntEl = document.getElementById('poleCountVal');
+  if (cntEl) cntEl.textContent = String(d.poleCount || 1);
+  const batchBtn = document.getElementById('poleModeBatch');
+  const indBtn   = document.getElementById('poleModeIndividual');
+  if (batchBtn) batchBtn.classList.toggle('selected',  !!d.poleBatchMode);
+  if (indBtn)   indBtn.classList.toggle('selected',   !d.poleBatchMode);
+  const container = document.getElementById('poleItemsContainer');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const rows = d.poleBatchMode
+    ? [{ idx: 0, title: '全 ' + (d.poleCount || 1) + ' 本に適用' }]
+    : Array.from({ length: d.poleCount || 1 }, (_, i) => ({ idx: i, title: 'ポール ' + (i + 1) }));
+
+  rows.forEach(function(row) {
+    const it = d.poleItems[row.idx] || { excavation: null, finish: null };
+    if (!d.poleItems[row.idx]) d.poleItems[row.idx] = it;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'border:1.5px solid var(--border);border-radius:14px;padding:12px;margin-bottom:10px;background:var(--surface2,transparent);';
+    const exc = it.excavation;
+    const fin = it.finish;
+    const showFin = !!exc;
+    wrap.innerHTML =
+      '<div class="field-section-label" style="margin-bottom:8px;">📍 ' + row.title + '</div>' +
+      '<div class="field-section-label" style="margin-top:4px;">⛏️ 掘削するもの</div>' +
+      '<div class="btn-grid col3" style="margin-bottom:0;">' +
+        '<button class="choice-btn' + (exc === '土' ? ' selected' : '') + '" data-key="excavation" data-val="土"><span class="icon">🌱</span>土</button>' +
+        '<button class="choice-btn' + (exc === 'アスファルト' ? ' selected' : '') + '" data-key="excavation" data-val="アスファルト"><span class="icon">🛣️</span>アスファルト</button>' +
+        '<button class="choice-btn' + (exc === 'コンクリ' ? ' selected' : '') + '" data-key="excavation" data-val="コンクリ"><span class="icon">🧱</span>コンクリ</button>' +
+      '</div>' +
+      '<div style="display:' + (showFin ? 'block' : 'none') + ';margin-top:12px;">' +
+        '<div class="field-section-label" style="margin-top:4px;">🪣 埋設後の仕上げ</div>' +
+        '<div class="btn-grid col2" style="margin-bottom:0;">' +
+          '<button class="choice-btn' + (fin === 'アスファルト仕上げ' ? ' selected' : '') + '" data-key="finish" data-val="アスファルト仕上げ"><span class="icon">🛣️</span>アスファルト</button>' +
+          '<button class="choice-btn' + (fin === '左官仕上げ' ? ' selected' : '') + '" data-key="finish" data-val="左官仕上げ"><span class="icon">🪣</span>左官仕上げ</button>' +
+        '</div>' +
+      '</div>';
+    wrap.querySelectorAll('button.choice-btn').forEach(function(b) {
+      b.addEventListener('click', function() {
+        pickPoleItem(row.idx, b.dataset.key, b.dataset.val);
+      });
+    });
+    container.appendChild(wrap);
+  });
 }
 
 // ══════════════════════════════════════
@@ -794,10 +900,6 @@ function pick(btn, key, val) {
   d[key] = val;
   const nb = document.getElementById('next'+step);
   if (nb) nb.disabled = false;
-  if (key === 'excavation') {
-    const fin = document.getElementById('finishSection');
-    if (fin) fin.style.display = 'block';
-  }
 }
 
 // IPカメラ＋ステレオカメラの合計台数を返す（グループデータから集計）
@@ -1400,6 +1502,29 @@ function toggleToku(mode) {
 // ══════════════════════════════════════
 // レポート生成
 // ══════════════════════════════════════
+// ポール新設の選択内容をレポート用テキストに変換する
+function buildPoleText(r) {
+  if (r.poleNew === 'なし') return 'ポール新設　：なし';
+  if (r.poleNew !== 'あり') return '';
+  // 旧形式互換：poleItems が無ければ excavation/poleFinish から1件合成
+  let items = Array.isArray(r.poleItems) ? r.poleItems : [];
+  if (items.length === 0 && (r.excavation || r.poleFinish)) {
+    items = [{ excavation: r.excavation || null, finish: r.poleFinish || null }];
+  }
+  if (items.length === 0) items = [{ excavation: null, finish: null }];
+  const count = Math.max(items.length, r.poleCount || items.length || 1);
+  const fmt = function(it) {
+    return '掘削=' + (it.excavation || '未選択') + '／仕上げ=' + (it.finish || '未選択');
+  };
+  if (r.poleBatchMode !== false && items.length === 1) {
+    return 'ポール新設　：あり（' + count + '本）\n　全' + count + '本：' + fmt(items[0]);
+  }
+  const lines = items.map(function(it, i) {
+    return '　ポール' + (i + 1) + '：' + fmt(it);
+  });
+  return 'ポール新設　：あり（' + count + '本）\n' + lines.join('\n');
+}
+
 // アーム取付情報をレポート用テキストに変換する
 function buildArmText(armData) {
   if (!armData || Object.keys(armData).length === 0) return 'アーム　　：未設定';
@@ -1521,9 +1646,7 @@ function buildText(r) {
   const haizaiLine      = r.haizai ? ('廃材処理　：'+r.haizai+(r.haizaiNote?' （'+r.haizaiNote+'）':'')) : '';
   const armHandlingLine = r.armHandling ? ('アーム手配　：'+r.armHandling) : '';
   const areaLine        = r.area ? ('エリア　　：'+r.area+(r.areaDetail?' '+r.areaDetail:'')) : '';
-  const poleLine        = r.poleNew === 'あり'
-    ? ('ポール新設　：あり（掘削：'+(r.excavation||'未選択')+'　仕上げ：'+(r.poleFinish||'未選択')+'）')
-    : r.poleNew === 'なし' ? 'ポール新設　：なし' : '';
+  const poleLine        = buildPoleText(r);
   return `━━━━━━━━━━━━━━━━━━━━━━
 　現調レポート
 　作成日：${r.createdAt}
@@ -1604,8 +1727,9 @@ function generateReport() {
     area:         d.area || '',
     areaDetail:   (document.getElementById('areaDetail') && document.getElementById('areaDetail').value) || '',
     poleNew:      d.poleNew || '',
-    excavation:   d.excavation || '',
-    poleFinish:   d.poleFinish || '',
+    poleCount:    d.poleCount || 1,
+    poleBatchMode: d.poleBatchMode !== false,
+    poleItems:    JSON.parse(JSON.stringify(d.poleItems || [])),
     systemCount:  d.systemCount || 1,
     cameraCounts,
     armData:      JSON.parse(JSON.stringify(d.armData||{})),
