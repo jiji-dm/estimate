@@ -18,20 +18,20 @@ function calcEstimate(r) {
   const camTotal  = ipCnt + sterCnt;
   const sysCount  = r.systemCount || 1;
 
-  if (camTotal > 0) {
-    // グループ内ではカメラがプール（システム別ではない）ため、count>=2のときは
-    // ceil(カメラ数 / システム数) でそのグループのsys1のカメラ数を推定する。
-    // 上限は1システムあたりの最大接続数3台。
-    const groupFree = groups.map(function(g) {
-      const gCam = (g.camIP || 0) + (g.camStereo || 0);
-      const gCnt = Math.max(1, g.count || 1);
-      return Math.min(3, Math.ceil(gCam / gCnt));
-    });
-    // 最もカメラの多いグループのsys1を「基本工事の充当先」として採用
-    const freeCams = groupFree.length
-      ? Math.max.apply(null, groupFree)
-      : Math.min(3, camTotal);
+  // グループ内ではカメラがプール（システム別ではない）ため、count>=2のときは
+  // ceil(カメラ数 / システム数) でそのグループのsys1のカメラ数を推定する。
+  // 上限は1システムあたりの最大接続数3台。
+  const groupFree = groups.map(function(g) {
+    const gCam = (g.camIP || 0) + (g.camStereo || 0);
+    const gCnt = Math.max(1, g.count || 1);
+    return Math.min(3, Math.ceil(gCam / gCnt));
+  });
+  // 最もカメラの多いグループのsys1を「基本工事の充当先」として採用
+  const freeCams = groupFree.length
+    ? Math.max.apply(null, groupFree)
+    : Math.min(3, camTotal);
 
+  if (camTotal > 0 && r.kojiType !== '撤去') {
     // 基本工事費（sys1 + sys1のカメラ最大3台込み）
     const base = 65000;
     lines.push({ label: `基本設置工事費`, val: base });
@@ -152,11 +152,25 @@ function calcEstimate(r) {
     total += nightFee;
   }
 
-  // 撤去工事費（仮設）
-  if (r.kojiType === '仮設') {
-    const remFee = (40000 + 5000) * sysCount;
-    lines.push({ label: `撤去工事費（${sysCount}システム）`, val: remFee });
-    total += remFee;
+  // 撤去工事費（撤去・仮設で適用）
+  if (camTotal > 0 && (r.kojiType === '撤去' || r.kojiType === '仮設')) {
+    const remBase = 40000;
+    lines.push({ label: `基本撤去工事費`, val: remBase });
+    total += remBase;
+
+    const sysExtraRem = Math.max(0, sysCount - 1);
+    if (sysExtraRem > 0) {
+      const sysRemFee = sysExtraRem * 5000;
+      lines.push({ label: `システム撤去追加費（${sysExtraRem}台 × ¥5,000）`, val: sysRemFee });
+      total += sysRemFee;
+    }
+
+    const extraCamRem = Math.max(0, camTotal - freeCams);
+    if (extraCamRem > 0) {
+      const camRemFee = extraCamRem * 1500;
+      lines.push({ label: `追加カメラ撤去費（${extraCamRem}台 × ¥1,500）`, val: camRemFee });
+      total += camRemFee;
+    }
   }
 
   // ポール新設費（本数 × 種別ごとに加算）
