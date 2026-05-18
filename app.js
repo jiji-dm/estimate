@@ -66,6 +66,7 @@ let step = 1, d = {}, kosoMode = null, tokuMode = null, currentReport = null, mo
 d.systemCount  = 1;
 d.armData      = {};
 d.dateData = { single:{mode:'confirm'}, install:{mode:'confirm'}, remove:{mode:'confirm'} };
+d.lanChange = {};
 d.poleCount     = 1;
 d.poleBatchMode = true;
 d.poleItems     = [{ excavation: null, finish: null }];
@@ -650,8 +651,11 @@ function buildDateStep() {
   const isKasetsu = d.kojiType === '仮設';
   document.getElementById('dateBlock_single').style.display  = isKasetsu ? 'none'  : 'block';
   document.getElementById('dateBlock_kasetsu').style.display = isKasetsu ? 'block' : 'none';
-  const title = isKasetsu ? '設置日・撤去日を設定してください' :
-    (d.kojiType==='撤去' ? '撤去日はいつですか？' : '設置日はいつですか？');
+  let title;
+  if (isKasetsu) title = '設置日・撤去日を設定してください';
+  else if (d.kojiType === '撤去') title = '撤去日はいつですか？';
+  else if (d.kojiType === '交換' || d.kojiType === '移設') title = '作業日はいつですか？';
+  else title = '設置日はいつですか？';
   document.getElementById('step3Title').textContent = title;
 
   if (isKasetsu) {
@@ -842,10 +846,36 @@ function showStep(n) {
   if (n === 8) initGroupArmStep();
   if (n === 12) initPowerStep();
   if (n === 13) buildWorkStep();
+  if (n === 11) buildLanQueryVisibility();
   // 新Step9（アーム手配）：すべて「なし」ならスキップ
   if (n === 9 && isAllNoArm()) { step=10; showStep(10); return; }
   // 新Step15（廃材処理）：設置工事ならスキップ
   if (n === 15 && d.kojiType === '設置') { step=16; showStep(16); return; }
+}
+
+// LAN変更確認ブロック（交換/移設のみ表示）の表示制御と選択状態の復元
+function buildLanQueryVisibility() {
+  const el = document.getElementById('lanChangeQuery');
+  if (!el) return;
+  const show = d.kojiType === '交換' || d.kojiType === '移設';
+  el.style.display = show ? 'block' : 'none';
+  if (show) {
+    el.querySelectorAll('.choice-btn').forEach(b=>b.classList.remove('selected'));
+    const lc = d.lanChange || {};
+    Object.keys(lc).forEach(key => {
+      const val = lc[key];
+      const btn = el.querySelector(`button[onclick*="'${key}','${val}'"]`);
+      if (btn) btn.classList.add('selected');
+    });
+  }
+}
+
+// LAN変更の Yes/No 選択
+function pickLanChange(btn, key, val) {
+  btn.closest('.btn-grid').querySelectorAll('.choice-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  if (!d.lanChange) d.lanChange = {};
+  d.lanChange[key] = val;
 }
 // アーム取付がすべて「なし」か判定する（グループarmDataを優先チェック）
 function isAllNoArm() {
@@ -1400,7 +1430,10 @@ function buildWorkStep() {
   document.getElementById('workBlock_single').style.display   = isKasetsu ? 'none'  : 'block';
   document.getElementById('workBlock_kasetsu').style.display  = isKasetsu ? 'block' : 'none';
   const title = isKasetsu ? '設置・撤去の作業計画' :
-    (d.kojiType==='撤去' ? '撤去工事の作業計画' : '設置工事の作業計画');
+    (d.kojiType==='撤去' ? '撤去工事の作業計画' :
+     d.kojiType==='交換' ? '交換工事の作業計画' :
+     d.kojiType==='移設' ? '移設工事の作業計画' :
+     '設置工事の作業計画');
   document.getElementById('step11Title').textContent = title;
   if (!d.workPlan) d.workPlan = {};
   if (isKasetsu) {
@@ -1607,7 +1640,10 @@ function buildWorkDateText(r) {
   if (r.kojiType === '仮設') {
     return `設置日　　：${r.installDate}\n撤去日　　：${r.removeDate}`;
   }
-  const label = r.kojiType === '撤去' ? '撤去日' : '設置日';
+  let label;
+  if (r.kojiType === '撤去') label = '撤去日';
+  else if (r.kojiType === '交換' || r.kojiType === '移設') label = '作業日';
+  else label = '設置日';
   return `${label}　　：${r.workDate}`;
 }
 
@@ -1738,6 +1774,7 @@ function generateReport() {
     lanLength:    document.getElementById('lanLength').value,
     wireSupport:  document.getElementById('wireSupport').value,
     powerGroups:  JSON.parse(JSON.stringify(powerGroups||[])),
+    lanChange:    JSON.parse(JSON.stringify(d.lanChange||{})),
     kosoLine, tokuLine,
     kosoEquip:    JSON.parse(JSON.stringify(d.kosoEquip||[])),
     kosoSupply:   d.kosoSupply || '',
@@ -2000,7 +2037,7 @@ function renderList() {
       <div class="card-edit-panel" id="cedit_${r.id}" style="display:none;">
         <div class="cedit-section-label">基本情報</div>
         ${makeEditItem(r.id,'siteName','🏢 現場名',r.siteName,'text')}
-        ${makeEditItem(r.id,'kojiType','⚙️ 工事内容',r.kojiType,'choice',['設置','撤去','仮設'])}
+        ${makeEditItem(r.id,'kojiType','⚙️ 工事内容',r.kojiType,'choice',['設置','撤去','仮設','交換','移設'])}
         ${makeEditItem(r.id,'timeZone','🕐 時間帯',r.timeZone,'choice',['日中','夜間'])}
         ${makeEditItem(r.id,'location','📍 工事場所',r.location,'choice',['屋内','屋外'])}
         ${makeEditItem(r.id,'area','🗾 エリア',r.area||'未選択','choice',['都内','関東','東北','関西','九州','北海道'])}
