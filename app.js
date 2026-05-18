@@ -247,9 +247,6 @@ function getPowerGroupSummary(g) {
 function buildPowerGroupDOM(g, idx, sysTotal) {
   var complete = isPowerGroupComplete(g);
   var summary  = getPowerGroupSummary(g);
-  var assigned = powerGroups.reduce(function(s,x){return s+x.count;}, 0);
-  var others   = assigned - g.count;
-  var canInc   = others + g.count + 1 <= sysTotal;
 
   // ヘッダーのタイトル：グループ名があれば優先、なければ「システムN台」
   var displayTitle = (g.groupName && g.groupName.trim()) ? g.groupName.trim() : 'システム ' + g.count + '台';
@@ -267,12 +264,8 @@ function buildPowerGroupDOM(g, idx, sysTotal) {
     '</div>' +
     '<div style="display:flex;align-items:center;gap:8px;">' +
       '<div class="power-group-check">' + (complete ? '✓' : '') + '</div>' +
-      '<button class="delete-btn" id="pgdel_'+g.id+'">🗑️</button>' +
     '</div>';
-  header.addEventListener('click', function(e) {
-    if (e.target.id === 'pgdel_'+g.id || e.target.closest('#pgdel_'+g.id)) {
-      pgDelete(g.id); return;
-    }
+  header.addEventListener('click', function() {
     pgToggle(g.id);
   });
   wrap.appendChild(header);
@@ -297,15 +290,18 @@ function buildPowerGroupDOM(g, idx, sysTotal) {
   countRow.className = 'power-count-row';
   countRow.innerHTML =
     '<div class="power-count-label">📦 システム台数</div>' +
-    '<div class="camera-count-ctrl">' +
-      '<button class="cnt-btn" id="pgm_'+g.id+'"' + (g.count<=1?' disabled':'') + '>−</button>' +
-      '<div class="cnt-val" style="font-size:18px;">' + g.count + '</div>' +
-      '<button class="cnt-btn" id="pgp_'+g.id+'"' + (!canInc?' disabled':'') + '>＋</button>' +
-      '<span style="font-size:11px;color:var(--text-dim);">台</span>' +
-    '</div>';
-  countRow.querySelector('#pgm_'+g.id).addEventListener('click', function(){ pgChange(g.id,'count',-1); });
-  countRow.querySelector('#pgp_'+g.id).addEventListener('click', function(){ pgChange(g.id,'count',1); });
+    '<div class="cnt-val" style="font-size:18px;">' + g.count + ' 台</div>';
   body.appendChild(countRow);
+
+  if (g.deviceType === 'camera') {
+    var totalCam = (g.camIP || 0) + (g.camStereo || 0);
+    var camRow = document.createElement('div');
+    camRow.className = 'power-count-row';
+    camRow.innerHTML =
+      '<div class="power-count-label">📷 カメラ台数</div>' +
+      '<div class="cnt-val" style="font-size:18px;">' + totalCam + ' 台</div>';
+    body.appendChild(camRow);
+  }
 
   var pwrLabel = document.createElement('div');
   pwrLabel.className = 'arm-sub-label';
