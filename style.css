@@ -162,6 +162,29 @@ small.sub { color: var(--text-muted); font-size: 10px; display: block; margin-to
   color: #fff; min-width: 40px; text-align: center;
 }
 .work-plan-unit { font-size: 11px; color: var(--text-dim); }
+.work-plan-presets {
+  justify-content: center;
+  gap: 10px;
+  padding-top: 8px;
+  border-bottom: none;
+}
+.hours-preset-btn {
+  flex: 1;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.18s;
+}
+.hours-preset-btn:hover,
+.hours-preset-btn:active {
+  border-color: var(--accent);
+  color: var(--accent2);
+  background: var(--accent-glow);
+}
 
 /* ══ フィールドセクション ══ */
 .field-section {

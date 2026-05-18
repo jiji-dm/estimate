@@ -1446,6 +1446,10 @@ function buildWorkSection(id) {
         <div class="work-plan-unit">時間</div>
       </div>
     </div>
+    <div class="work-plan-row work-plan-presets">
+      <button class="hours-preset-btn" onclick="workPlanChange('${id}','hours',-8)">− 1日 (8h)</button>
+      <button class="hours-preset-btn" onclick="workPlanChange('${id}','hours',8)">＋ 1日 (8h)</button>
+    </div>
   </div>`;
 }
 
