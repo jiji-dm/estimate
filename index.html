@@ -55,6 +55,12 @@
           <button class="choice-btn" onclick="pickKojiType(this,'仮設')">
             <span class="icon">🔄</span>仮設<small class="sub">設置＆撤去セット</small>
           </button>
+          <button class="choice-btn" onclick="pickKojiType(this,'交換')">
+            <span class="icon">🔁</span>交換<small class="sub">撤去＋設置</small>
+          </button>
+          <button class="choice-btn" onclick="pickKojiType(this,'移設')">
+            <span class="icon">📦</span>移設<small class="sub">撤去＋設置</small>
+          </button>
         </div>
         <button class="next-btn" id="next2" onclick="nextStep()" disabled>次へ →</button>
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
@@ -232,6 +238,24 @@
       <!-- Step 11: LANケーブルと配線支持材（旧Step 13） -->
       <div class="step" data-step="11">
         <div class="step-q">LANケーブルと配線支持材</div>
+
+        <!-- 交換/移設のときのみ表示：LAN変更有無の確認 -->
+        <div id="lanChangeQuery" style="display:none;margin-bottom:16px;padding:12px;background:rgba(255,255,255,0.04);border-radius:8px;">
+          <div style="font-size:13px;color:var(--text-dim);margin-bottom:10px;">
+            💡 LANケーブルの長さは変わりますか？以下を確認してください
+          </div>
+          <div class="field-section-label" style="font-size:12px;">📍 機器の位置は現在の位置から変わりますか？</div>
+          <div class="btn-grid col2" style="margin-bottom:10px;">
+            <button class="choice-btn" onclick="pickLanChange(this,'posChanged','yes')"><span class="icon">✅</span>変わる</button>
+            <button class="choice-btn" onclick="pickLanChange(this,'posChanged','no')"><span class="icon">🚫</span>変わらない</button>
+          </div>
+          <div class="field-section-label" style="font-size:12px;">🖥️ システム本体までの距離は変わりますか？</div>
+          <div class="btn-grid col2" style="margin-bottom:0;">
+            <button class="choice-btn" onclick="pickLanChange(this,'distChanged','yes')"><span class="icon">✅</span>変わる</button>
+            <button class="choice-btn" onclick="pickLanChange(this,'distChanged','no')"><span class="icon">🚫</span>変わらない</button>
+          </div>
+        </div>
+
         <div class="field-label">LANケーブル長さ（m）</div>
         <div class="inline-count-ctrl" style="margin-bottom:20px;">
           <button class="cnt-btn" onclick="lanCntChange(-5)">−</button>

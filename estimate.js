@@ -31,26 +31,44 @@ function calcEstimate(r) {
     const freeCams = groupFree.length
       ? Math.max.apply(null, groupFree)
       : Math.min(3, camTotal);
-
-    // 基本工事費（sys1 + sys1のカメラ最大3台込み）
-    const base = 65000;
-    lines.push({ label: `基本設置工事費`, val: base });
-    total += base;
-
-    // 追加システム費（2台目以降）
     const sysExtra = Math.max(0, sysCount - 1);
-    if (sysExtra > 0) {
-      const sysFee = sysExtra * 20000;
-      lines.push({ label: `システム追加費（${sysExtra}台 × ¥20,000）`, val: sysFee });
-      total += sysFee;
+    const extraCam = Math.max(0, camTotal - freeCams);
+
+    // 工事種別ごとの適用判定
+    const isInstall = r.kojiType !== '撤去';  // 設置/仮設/交換/移設
+    const isRemove  = r.kojiType === '撤去' || r.kojiType === '仮設'
+                   || r.kojiType === '交換' || r.kojiType === '移設';
+
+    // ── 設置料金 ──
+    if (isInstall) {
+      lines.push({ label: `基本設置工事費`, val: 65000 });
+      total += 65000;
+      if (sysExtra > 0) {
+        const sysFee = sysExtra * 20000;
+        lines.push({ label: `システム追加費（${sysExtra}台 × ¥20,000）`, val: sysFee });
+        total += sysFee;
+      }
+      if (extraCam > 0) {
+        const extraFee = extraCam * 15000;
+        lines.push({ label: `追加カメラ工事費（${extraCam}台 × ¥15,000）`, val: extraFee });
+        total += extraFee;
+      }
     }
 
-    // 追加カメラ費（sys1の3台超過分 + 他システム紐付きのカメラ全部）
-    const extraCam = Math.max(0, camTotal - freeCams);
-    if (extraCam > 0) {
-      const extraFee = extraCam * 15000;
-      lines.push({ label: `追加カメラ工事費（${extraCam}台 × ¥15,000）`, val: extraFee });
-      total += extraFee;
+    // ── 撤去料金 ──
+    if (isRemove) {
+      lines.push({ label: `撤去基本工事費`, val: 40000 });
+      total += 40000;
+      if (sysExtra > 0) {
+        const sysFee = sysExtra * 5000;
+        lines.push({ label: `撤去システム追加費（${sysExtra}台 × ¥5,000）`, val: sysFee });
+        total += sysFee;
+      }
+      if (extraCam > 0) {
+        const extraFee = extraCam * 1500;
+        lines.push({ label: `撤去追加カメラ工事費（${extraCam}台 × ¥1,500）`, val: extraFee });
+        total += extraFee;
+      }
     }
   }
 
@@ -150,13 +168,6 @@ function calcEstimate(r) {
     if (nightDays >= 2 && nightHours > 0) nightFee += nightHours * 3000;
     lines.push({ label: `夜間作業費`, val: nightFee });
     total += nightFee;
-  }
-
-  // 撤去工事費（仮設）
-  if (r.kojiType === '仮設') {
-    const remFee = (40000 + 5000) * sysCount;
-    lines.push({ label: `撤去工事費（${sysCount}システム）`, val: remFee });
-    total += remFee;
   }
 
   // ポール新設費（本数 × 種別ごとに加算）
