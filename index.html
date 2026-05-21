@@ -227,9 +227,18 @@
       <div class="step" data-step="10">
         <div class="step-q">LANケーブルの配線方法は？</div>
         <div class="btn-grid col3">
-          <button class="choice-btn" onclick="pick(this,'wiring','露出')"><span class="icon">〰️</span>露出</button>
-          <button class="choice-btn" onclick="pick(this,'wiring','配管')"><span class="icon">🔲</span>配管</button>
-          <button class="choice-btn" onclick="pick(this,'wiring','天井内')"><span class="icon">🏗️</span>天井内</button>
+          <button class="choice-btn" onclick="pickWiring(this,'露出')"><span class="icon">〰️</span>露出</button>
+          <button class="choice-btn" onclick="pickWiring(this,'配管')"><span class="icon">🔲</span>配管</button>
+          <button class="choice-btn" onclick="pickWiring(this,'天井内')"><span class="icon">🏗️</span>天井内</button>
+        </div>
+        <div id="lanPipeTypeWrap" style="display:none;margin-top:14px;">
+          <div class="field-label" style="margin-bottom:8px;">🔧 配管の種別</div>
+          <div class="btn-grid col2">
+            <button class="choice-btn" onclick="pickLanPipeType(this,'VE管(塩ビ)')"><span class="icon">🟡</span>VE管(塩ビ)</button>
+            <button class="choice-btn" onclick="pickLanPipeType(this,'P薄鋼電線管')"><span class="icon">🔩</span>P薄鋼電線管</button>
+            <button class="choice-btn" onclick="pickLanPipeType(this,'Pドブ付(溶融亜鉛めっき)')"><span class="icon">⚙️</span>Pドブ付</button>
+            <button class="choice-btn" onclick="pickLanPipeType(this,'モール')"><span class="icon">📏</span>モール</button>
+          </div>
         </div>
         <button class="next-btn" id="next10" onclick="nextStep()" disabled>次へ →</button>
         <button class="back-btn" onclick="prevStep()">← 戻る</button>

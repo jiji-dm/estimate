@@ -404,7 +404,7 @@ function buildPowerGroupDOM(g, idx, sysTotal) {
     body.appendChild(pipeRow);
     if (g.pipe === 'yes') {
       var psub = document.createElement('div'); psub.className='power-pipe-sub';
-      [['鉄','🔩 鉄'],['塩ビ','🟡 塩ビ'],['露出','📎 露出'],['モール','📏 モール']].forEach(function(pair) {
+      [['VE管(塩ビ)','🟡 VE管(塩ビ)'],['P薄鋼電線管','🔩 P薄鋼電線管'],['Pドブ付(溶融亜鉛めっき)','⚙️ Pドブ付'],['露出','📎 露出'],['モール','📏 モール']].forEach(function(pair) {
         var btn = document.createElement('button');
         btn.className='power-pipe-sub-btn'+(g.pipeType===pair[0]?' sel':'');
         btn.textContent=pair[1];
@@ -925,6 +925,33 @@ function pick(btn, key, val) {
   btn.classList.add('selected');
   d[key] = val;
   const nb = document.getElementById('next'+step);
+  if (nb) nb.disabled = false;
+}
+
+// LAN配線方法の選択（配管選択時はサブの配管タイプUIを表示・必須化）
+function pickWiring(btn, val) {
+  btn.closest('.btn-grid').querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  d.wiring = val;
+  const wrap = document.getElementById('lanPipeTypeWrap');
+  const nb = document.getElementById('next10');
+  if (val === '配管') {
+    if (wrap) wrap.style.display = 'block';
+    if (nb) nb.disabled = !d.lanPipeType;
+  } else {
+    if (wrap) wrap.style.display = 'none';
+    d.lanPipeType = null;
+    wrap && wrap.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+    if (nb) nb.disabled = false;
+  }
+}
+
+// LAN配管タイプの選択
+function pickLanPipeType(btn, val) {
+  btn.closest('.btn-grid').querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  d.lanPipeType = val;
+  const nb = document.getElementById('next10');
   if (nb) nb.disabled = false;
 }
 
@@ -1771,6 +1798,7 @@ function generateReport() {
     armData:      JSON.parse(JSON.stringify(d.armData||{})),
     armText:      buildGroupArmText(powerGroups) || buildArmText(d.armData),
     wiring:       d.wiring || '未選択',
+    lanPipeType:  d.lanPipeType || null,
     lanLength:    document.getElementById('lanLength').value,
     wireSupport:  document.getElementById('wireSupport').value,
     powerGroups:  JSON.parse(JSON.stringify(powerGroups||[])),
@@ -2228,6 +2256,8 @@ function resetAll() {
   powerGroups = []; powerGid = 0;
   document.getElementById('lanLength').value='10';
   document.getElementById('lanLengthVal').textContent='10';
+  const lpWrap = document.getElementById('lanPipeTypeWrap');
+  if (lpWrap) lpWrap.style.display = 'none';
   showStep(1);
 }
 // 入力タブ/保存済みタブを切り替える

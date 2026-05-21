@@ -1,6 +1,14 @@
 // ══════════════════════════════════════
 // 概算見積計算
 // ══════════════════════════════════════
+// 配管種別ごとの単価（円/m）。モールは箇所単価で別途集計するため除外。
+const PIPE_RATES = {
+  'VE管(塩ビ)': 2000,
+  'P薄鋼電線管': 3500,
+  'Pドブ付(溶融亜鉛めっき)': 5000,
+  '露出': 100,
+};
+
 // currentReport を受け取り工事費の明細と合計を計算して返す
 function calcEstimate(r) {
   const lines = [];
@@ -80,6 +88,22 @@ function calcEstimate(r) {
     total += lanFee;
   }
 
+  // LAN配線方法による配管・露出料金
+  if (lan > 0) {
+    if (r.wiring === '露出') {
+      const exposedFee = Math.round(lan * PIPE_RATES['露出']);
+      lines.push({ label: `LAN露出配線（${lan}m × ${fmtYen(PIPE_RATES['露出'])}）`, val: exposedFee });
+      total += exposedFee;
+    } else if (r.wiring === '配管' && r.lanPipeType && r.lanPipeType !== 'モール') {
+      const rate = PIPE_RATES[r.lanPipeType] || 0;
+      if (rate > 0) {
+        const lanPipeFee = Math.round(lan * rate);
+        lines.push({ label: `LAN配管 ${r.lanPipeType}（${lan}m × ${fmtYen(rate)}）`, val: lanPipeFee });
+        total += lanPipeFee;
+      }
+    }
+  }
+
   // 電源工事費
   const powerGroups = r.powerGroups || [];
   powerGroups.forEach(function(g) {
@@ -110,13 +134,15 @@ function calcEstimate(r) {
     // 条件C：配管
     if (g.pipe === 'yes' && g.pipeType === 'モール') {
       // モール配管は別途モール費で計上
-    } else if (g.pipe === 'yes') {
-      // 電源配管（¥1,500/m）- 距離不明の場合は注記のみ
-      const pipeLen = g.newDistMode === 'custom' ? (g.newDistVal || 0) : (g.distMode === '1m以内' ? 1 : (g.distVal || 0));
-      if (pipeLen > 0) {
-        const pipeFee = pipeLen * 1500;
-        lines.push({ label: `電源配管（${pipeLen}m × ¥1,500）`, val: pipeFee });
-        total += pipeFee;
+    } else if (g.pipe === 'yes' && g.pipeType) {
+      const rate = PIPE_RATES[g.pipeType] || 0;
+      if (rate > 0) {
+        const pipeLen = g.newDistMode === 'custom' ? (g.newDistVal || 0) : (g.distMode === '1m以内' ? 1 : (g.distVal || 0));
+        if (pipeLen > 0) {
+          const pipeFee = pipeLen * rate;
+          lines.push({ label: `電源配管 ${g.pipeType}（${pipeLen}m × ${fmtYen(rate)}）`, val: pipeFee });
+          total += pipeFee;
+        }
       }
     }
   });
@@ -206,8 +232,9 @@ function calcEstimate(r) {
     });
   }
 
-  // モール配管費（電源グループから集計）
-  const moorCount = powerGroups.filter(function(g) { return g.pipe === 'yes' && g.pipeType === 'モール'; }).length;
+  // モール配管費（電源グループ + LAN から集計）
+  let moorCount = powerGroups.filter(function(g) { return g.pipe === 'yes' && g.pipeType === 'モール'; }).length;
+  if (r.wiring === '配管' && r.lanPipeType === 'モール') moorCount += 1;
   if (moorCount > 0) {
     const moorFee = moorCount * 3000;
     lines.push({ label: `モール配管費（${moorCount}箇所 × ¥3,000）`, val: moorFee });
