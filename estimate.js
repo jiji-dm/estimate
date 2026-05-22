@@ -9,6 +9,27 @@ const PIPE_RATES = {
   '露出': 100,
 };
 
+// LAN区間配列を取得する（旧フィールドからのフォールバック対応）
+function getLanSegments(r) {
+  if (Array.isArray(r.lanSegments) && r.lanSegments.length > 0) {
+    return r.lanSegments.map(function(s) {
+      return {
+        wiring: s.wiring || '',
+        pipeType: s.pipeType || null,
+        length: parseFloat(s.length) || 0,
+      };
+    });
+  }
+  if (r.wiring && r.wiring !== '未選択') {
+    return [{
+      wiring: r.wiring,
+      pipeType: r.lanPipeType || null,
+      length: parseFloat(r.lanLength) || 0,
+    }];
+  }
+  return [];
+}
+
 // currentReport を受け取り工事費の明細と合計を計算して返す
 function calcEstimate(r) {
   const lines = [];
@@ -80,29 +101,36 @@ function calcEstimate(r) {
     }
   }
 
-  // LANケーブル延長費
-  const lan = parseFloat(r.lanLength) || 0;
+  // LAN配線：区間ベース計算（旧フィールドからのフォールバックも対応）
+  const lanSegs = getLanSegments(r);
+  const lan = lanSegs.reduce(function(s, x) { return s + (parseFloat(x.length) || 0); }, 0);
+
+  // LANケーブル延長費（合計長さで判定）
   if (lan > 50) {
     const lanFee = Math.round((lan - 50) * 750);
     lines.push({ label: `LANケーブル延長費（${lan - 50}m超過 × ¥750）`, val: lanFee });
     total += lanFee;
   }
 
-  // LAN配線方法による配管・露出料金
-  if (lan > 0) {
-    if (r.wiring === '露出') {
-      const exposedFee = Math.round(lan * PIPE_RATES['露出']);
-      lines.push({ label: `LAN露出配線（${lan}m × ${fmtYen(PIPE_RATES['露出'])}）`, val: exposedFee });
+  // 区間ごとに配線方法別の料金を加算
+  lanSegs.forEach(function(seg, i) {
+    const len = parseFloat(seg.length) || 0;
+    if (len <= 0) return;
+    const tag = lanSegs.length > 1 ? `（区間${i + 1}）` : '';
+    if (seg.wiring === '露出') {
+      const exposedFee = Math.round(len * PIPE_RATES['露出']);
+      lines.push({ label: `LAN露出配線${tag}（${len}m × ${fmtYen(PIPE_RATES['露出'])}）`, val: exposedFee });
       total += exposedFee;
-    } else if (r.wiring === '配管' && r.lanPipeType && r.lanPipeType !== 'モール') {
-      const rate = PIPE_RATES[r.lanPipeType] || 0;
+    } else if (seg.wiring === '配管' && seg.pipeType && seg.pipeType !== 'モール') {
+      const rate = PIPE_RATES[seg.pipeType] || 0;
       if (rate > 0) {
-        const lanPipeFee = Math.round(lan * rate);
-        lines.push({ label: `LAN配管 ${r.lanPipeType}（${lan}m × ${fmtYen(rate)}）`, val: lanPipeFee });
+        const lanPipeFee = Math.round(len * rate);
+        lines.push({ label: `LAN配管 ${seg.pipeType}${tag}（${len}m × ${fmtYen(rate)}）`, val: lanPipeFee });
         total += lanPipeFee;
       }
     }
-  }
+    // 天井内は配線費なし（既存仕様）。モール配管は下のモール集計で別計上。
+  });
 
   // 電源工事費
   const powerGroups = r.powerGroups || [];
@@ -232,9 +260,9 @@ function calcEstimate(r) {
     });
   }
 
-  // モール配管費（電源グループ + LAN から集計）
+  // モール配管費（電源グループ + LAN区間 から集計）
   let moorCount = powerGroups.filter(function(g) { return g.pipe === 'yes' && g.pipeType === 'モール'; }).length;
-  if (r.wiring === '配管' && r.lanPipeType === 'モール') moorCount += 1;
+  moorCount += lanSegs.filter(function(s) { return s.wiring === '配管' && s.pipeType === 'モール'; }).length;
   if (moorCount > 0) {
     const moorFee = moorCount * 3000;
     lines.push({ label: `モール配管費（${moorCount}箇所 × ¥3,000）`, val: moorFee });

@@ -51,7 +51,7 @@ const OFFICES = [
 ];
 
 // 総ステップ数
-const TOTAL = 16;
+const TOTAL = 15;
 // 選択可能な機器種別の定義（キー名・アイコン）
 const DEVICE_DEFS = [
   { key: 'IPカメラ',     icon: '📷' },
@@ -67,6 +67,9 @@ d.systemCount  = 1;
 d.armData      = {};
 d.dateData = { single:{mode:'confirm'}, install:{mode:'confirm'}, remove:{mode:'confirm'} };
 d.lanChange = {};
+d.lanSegments = [];
+// LAN区間のID採番カウンター
+let lanSegId = 0;
 d.poleCount     = 1;
 d.poleBatchMode = true;
 d.poleItems     = [{ excavation: null, finish: null }];
@@ -195,7 +198,7 @@ function renderPowerGroups() {
   var totalEl = document.getElementById('powerTotalNum');
   if (totalEl) totalEl.textContent = sysTotal;
   var badge = document.getElementById('powerStatusBadge');
-  var nextBtn = document.getElementById('next12');
+  var nextBtn = document.getElementById('next11');
   var allDone = powerGroups.length > 0 && powerGroups.every(function(g){return isPowerGroupComplete(g);});
   if (allDone) {
     if (badge) { badge.className = 'arm-status-badge ok'; badge.textContent = '✓ 完了'; }
@@ -840,14 +843,13 @@ function showStep(n) {
   updateProgress();
   if (n === 3) buildDateStep();
   if (n === 8) initGroupArmStep();
-  if (n === 12) initPowerStep();
-  if (n === 13) buildWorkStep();
-  if (n === 11) buildLanQueryVisibility();
-  if (n === 10) buildWiringVisibility();
+  if (n === 10) initLanStep();
+  if (n === 11) initPowerStep();
+  if (n === 12) buildWorkStep();
   // 新Step9（アーム手配）：すべて「なし」ならスキップ
   if (n === 9 && isAllNoArm()) { step=10; showStep(10); return; }
-  // 新Step15（廃材処理）：設置工事ならスキップ
-  if (n === 15 && d.kojiType === '設置') { step=16; showStep(16); return; }
+  // 新Step14（廃材処理）：設置工事ならスキップ
+  if (n === 14 && d.kojiType === '設置') { step=15; showStep(15); return; }
 }
 
 // LAN変更確認ブロック（交換/移設のみ表示）の表示制御と選択状態の復元
@@ -929,62 +931,211 @@ function pick(btn, key, val) {
   if (nb) nb.disabled = false;
 }
 
-// LAN配線方法の選択（配管選択時はサブの配管タイプUIを表示・必須化）
-function pickWiring(btn, val) {
-  btn.closest('.btn-grid').querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
-  btn.classList.add('selected');
-  d.wiring = val;
-  const wrap = document.getElementById('lanPipeTypeWrap');
-  const nb = document.getElementById('next10');
-  if (val === '配管') {
-    if (wrap) wrap.style.display = 'block';
-    if (nb) nb.disabled = !d.lanPipeType;
-  } else {
-    if (wrap) wrap.style.display = 'none';
-    d.lanPipeType = null;
-    wrap && wrap.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
-    if (nb) nb.disabled = false;
-  }
+// ══════════════════════════════════════
+// LAN区間（Step10）
+// ══════════════════════════════════════
+// 配線方法の選択肢
+const LAN_WIRING_OPTS = ['露出','配管','天井内'];
+// 配管種別の選択肢
+const LAN_PIPE_OPTS = ['VE管(塩ビ)','P薄鋼電線管','Pドブ付(溶融亜鉛めっき)','モール'];
+
+// Step10表示時の初期化（区間が空なら1件追加し、変更確認UIも復元）
+function initLanStep() {
+  if (!Array.isArray(d.lanSegments)) d.lanSegments = [];
+  if (d.lanSegments.length === 0) addLanSegment(true);
+  buildLanQueryVisibility();
+  renderLanSegments();
 }
 
-// LAN配管タイプの選択
-function pickLanPipeType(btn, val) {
-  btn.closest('.btn-grid').querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
-  btn.classList.add('selected');
-  d.lanPipeType = val;
-  const nb = document.getElementById('next10');
-  if (nb) nb.disabled = false;
-}
-
-// Step10 を表示するとき d.wiring / d.lanPipeType から配線方法・サブUI状態を復元する
-function buildWiringVisibility() {
-  const step10 = document.querySelector('[data-step="10"]');
-  if (!step10) return;
-  const wrap = document.getElementById('lanPipeTypeWrap');
-  const nb = document.getElementById('next10');
-
-  // 配線方法ボタン（外側 col3）の selected を d.wiring から復元
-  step10.querySelectorAll('.btn-grid.col3 .choice-btn').forEach(function(b) {
-    const onc = b.getAttribute('onclick') || '';
-    b.classList.toggle('selected', !!d.wiring && onc.indexOf("'" + d.wiring + "'") !== -1);
+// LAN区間を1件追加する（silent=trueなら再描画スキップ）
+function addLanSegment(silent) {
+  if (!Array.isArray(d.lanSegments)) d.lanSegments = [];
+  d.lanSegments.push({
+    id: ++lanSegId,
+    wiring: null,
+    pipeType: null,
+    length: 10,
   });
+  if (!silent) renderLanSegments();
+}
 
-  if (d.wiring === '配管') {
-    if (wrap) {
-      wrap.style.display = 'block';
-      wrap.querySelectorAll('.choice-btn').forEach(function(b) {
-        const onc = b.getAttribute('onclick') || '';
-        b.classList.toggle('selected', !!d.lanPipeType && onc.indexOf("'" + d.lanPipeType + "'") !== -1);
-      });
-    }
-    if (nb) nb.disabled = !d.lanPipeType;
-  } else {
-    if (wrap) {
-      wrap.style.display = 'none';
-      wrap.querySelectorAll('.choice-btn').forEach(function(b) { b.classList.remove('selected'); });
-    }
-    if (nb) nb.disabled = !d.wiring;
+// LAN区間を削除する（最後の1件は削除不可）
+function removeLanSegment(id) {
+  if (d.lanSegments.length <= 1) {
+    showToast('区間は最低1件必要です', 'red');
+    return;
   }
+  d.lanSegments = d.lanSegments.filter(s => s.id !== id);
+  renderLanSegments();
+}
+
+// LAN区間の配線方法をセット
+function setLanWiring(id, val) {
+  const s = d.lanSegments.find(x => x.id === id);
+  if (!s) return;
+  s.wiring = val;
+  if (val !== '配管') s.pipeType = null;
+  renderLanSegments();
+}
+
+// LAN区間の配管種別をセット
+function setLanPipeType(id, val) {
+  const s = d.lanSegments.find(x => x.id === id);
+  if (!s) return;
+  s.pipeType = val;
+  renderLanSegments();
+}
+
+// LAN区間の長さを増減する
+function lanSegLenChange(id, delta) {
+  const s = d.lanSegments.find(x => x.id === id);
+  if (!s) return;
+  s.length = Math.max(0, (s.length || 0) + delta);
+  const el = document.getElementById('lanSegLen_' + id);
+  if (el) el.textContent = s.length;
+  updateLanTotal();
+  updateLanNextBtn();
+}
+
+// LAN区間入力の完了判定
+function isLanSegComplete(s) {
+  if (!s.wiring) return false;
+  if (s.wiring === '配管' && !s.pipeType) return false;
+  if (!s.length || s.length <= 0) return false;
+  return true;
+}
+
+// 全区間入力済みかつ次へボタンの有効化を制御
+function updateLanNextBtn() {
+  const nb = document.getElementById('next10');
+  if (!nb) return;
+  const allOk = d.lanSegments.length > 0 && d.lanSegments.every(isLanSegComplete);
+  nb.disabled = !allOk;
+}
+
+// LAN合計長さを再計算してバーに反映
+function updateLanTotal() {
+  const total = (d.lanSegments || []).reduce((sum, s) => sum + (parseFloat(s.length) || 0), 0);
+  const el = document.getElementById('lanTotalNum');
+  if (el) el.textContent = total;
+}
+
+// LAN区間リストを描画する
+function renderLanSegments() {
+  const list = document.getElementById('lanSegmentList');
+  if (!list) return;
+  list.innerHTML = '';
+  d.lanSegments.forEach(function(s, idx) {
+    list.appendChild(buildLanSegmentDOM(s, idx));
+  });
+  updateLanTotal();
+  updateLanNextBtn();
+}
+
+// LAN区間1件分のDOMノードを生成
+function buildLanSegmentDOM(s, idx) {
+  const complete = isLanSegComplete(s);
+  const wrap = document.createElement('div');
+  wrap.className = 'power-group-card' + (complete ? ' complete' : '');
+  wrap.style.marginBottom = '10px';
+
+  // ヘッダー
+  const header = document.createElement('div');
+  header.className = 'power-group-header';
+  const summary = complete
+    ? (s.wiring + (s.wiring === '配管' && s.pipeType ? '（' + s.pipeType + '）' : '') + ' ' + s.length + 'm')
+    : '未入力';
+  header.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;">' +
+      '<div class="power-group-num">' + (idx + 1) + '</div>' +
+      '<div><div class="power-group-title">区間 ' + (idx + 1) + '</div>' +
+      '<div class="power-group-summary">' + summary + '</div></div>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:8px;">' +
+      '<div class="power-group-check">' + (complete ? '✓' : '') + '</div>' +
+    '</div>';
+  wrap.appendChild(header);
+
+  // 本体
+  const body = document.createElement('div');
+  body.className = 'power-group-body';
+
+  // 配線方法
+  const wLabel = document.createElement('div');
+  wLabel.className = 'arm-sub-label';
+  wLabel.style.cssText = 'margin:6px 0 8px;';
+  wLabel.textContent = '🔌 配線方法';
+  body.appendChild(wLabel);
+
+  const wGrid = document.createElement('div');
+  wGrid.className = 'btn-grid col3';
+  wGrid.style.marginBottom = '4px';
+  LAN_WIRING_OPTS.forEach(function(opt) {
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn' + (s.wiring === opt ? ' selected' : '');
+    const icon = opt === '露出' ? '〰️' : (opt === '配管' ? '🔲' : '🏗️');
+    btn.innerHTML = '<span class="icon">' + icon + '</span>' + opt;
+    btn.addEventListener('click', function() { setLanWiring(s.id, opt); });
+    wGrid.appendChild(btn);
+  });
+  body.appendChild(wGrid);
+
+  // 配管種別（配管選択時のみ）
+  if (s.wiring === '配管') {
+    const pLabel = document.createElement('div');
+    pLabel.className = 'arm-sub-label';
+    pLabel.style.cssText = 'margin:12px 0 8px;';
+    pLabel.textContent = '🔧 配管の種別';
+    body.appendChild(pLabel);
+
+    const pGrid = document.createElement('div');
+    pGrid.className = 'btn-grid col2';
+    pGrid.style.marginBottom = '4px';
+    const PIPE_ICONS = { 'VE管(塩ビ)':'🟡', 'P薄鋼電線管':'🔩', 'Pドブ付(溶融亜鉛めっき)':'⚙️', 'モール':'📏' };
+    const PIPE_LABELS = { 'VE管(塩ビ)':'VE管(塩ビ)', 'P薄鋼電線管':'P薄鋼電線管', 'Pドブ付(溶融亜鉛めっき)':'Pドブ付', 'モール':'モール' };
+    LAN_PIPE_OPTS.forEach(function(opt) {
+      const btn = document.createElement('button');
+      btn.className = 'choice-btn' + (s.pipeType === opt ? ' selected' : '');
+      btn.innerHTML = '<span class="icon">' + (PIPE_ICONS[opt] || '') + '</span>' + (PIPE_LABELS[opt] || opt);
+      btn.addEventListener('click', function() { setLanPipeType(s.id, opt); });
+      pGrid.appendChild(btn);
+    });
+    body.appendChild(pGrid);
+  }
+
+  // 長さ
+  const lLabel = document.createElement('div');
+  lLabel.className = 'arm-sub-label';
+  lLabel.style.cssText = 'margin:12px 0 8px;';
+  lLabel.textContent = '📏 長さ（m）';
+  body.appendChild(lLabel);
+
+  const lRow = document.createElement('div');
+  lRow.className = 'inline-count-ctrl';
+  lRow.style.marginBottom = '4px';
+  lRow.innerHTML =
+    '<button class="cnt-btn" id="lanSegMinus_' + s.id + '">−</button>' +
+    '<div style="display:flex;align-items:baseline;gap:4px;">' +
+      '<div class="cnt-val" id="lanSegLen_' + s.id + '" style="font-size:24px;min-width:48px;">' + (s.length || 0) + '</div>' +
+      '<span style="font-size:13px;color:var(--text-dim);">m</span>' +
+    '</div>' +
+    '<button class="cnt-btn" id="lanSegPlus_' + s.id + '">＋</button>';
+  body.appendChild(lRow);
+  lRow.querySelector('#lanSegMinus_' + s.id).addEventListener('click', function() { lanSegLenChange(s.id, -5); });
+  lRow.querySelector('#lanSegPlus_' + s.id).addEventListener('click', function() { lanSegLenChange(s.id, 5); });
+
+  // 削除ボタン（区間が2件以上のときのみ表示）
+  if (d.lanSegments.length > 1) {
+    const delBtn = document.createElement('button');
+    delBtn.className = 'card-act-btn';
+    delBtn.style.cssText = 'width:100%;margin-top:10px;font-size:12px;';
+    delBtn.textContent = '🗑️ この区間を削除';
+    delBtn.addEventListener('click', function() { removeLanSegment(s.id); });
+    body.appendChild(delBtn);
+  }
+
+  wrap.appendChild(body);
+  return wrap;
 }
 
 // IPカメラ＋ステレオカメラの合計台数を返す（グループデータから集計）
@@ -1367,24 +1518,23 @@ function updateMethodRowStyle(armKey, method, cnt) {
   });
 }
 
-// アーム取付ステップ全体のステータスと次へボタンを更新する
+// アーム取付ステップ全体のステータスと次へボタンを更新する（旧Step10専用・現在は未使用）
 function updateArmStatus() {
+  const assignedEl = document.getElementById('armAssignedNum');
+  const totalEl    = document.getElementById('armTotalNum');
+  // 旧Step10のDOMが存在しなければ何もしない（next10はLAN区間ステップ用なので絶対に触らない）
+  if (!assignedEl || !totalEl) return;
   const camTotal  = getTotalCameras();
   const assigned  = getArmAssigned();
   const remaining = camTotal - assigned;
-
-  document.getElementById('armAssignedNum').textContent = assigned;
-  document.getElementById('armTotalNum').textContent    = camTotal;
-
+  assignedEl.textContent = assigned;
+  totalEl.textContent    = camTotal;
   const badge  = document.getElementById('armStatusBadge');
-  const next10btn = document.getElementById('next10');
   if (assigned === camTotal && camTotal > 0) {
-    badge.className = 'arm-status-badge ok'; badge.textContent = '✓ 完了';
-    if (next10btn) next10btn.disabled = false;
-  } else {
+    if (badge) { badge.className = 'arm-status-badge ok'; badge.textContent = '✓ 完了'; }
+  } else if (badge) {
     badge.className = 'arm-status-badge warn';
     badge.textContent = remaining > 0 ? '残り ' + remaining + ' 台' : '超過 ' + Math.abs(remaining) + ' 台';
-    if (next10btn) next10btn.disabled = true;
   }
 }
 
@@ -1464,16 +1614,6 @@ function armCntChange(armKey, delta) {
   const el = document.getElementById('armCnt_'+armKey);
   if (el) el.textContent = next;
   updateArmStatus();
-}
-
-// LANケーブル長を増減する
-function lanCntChange(delta) {
-  const el   = document.getElementById('lanLength');
-  const disp = document.getElementById('lanLengthVal');
-  let val = parseInt(el.value) || 0;
-  val = Math.max(0, val + delta);
-  el.value = val;
-  disp.textContent = val;
 }
 
 // ══════════════════════════════════════
@@ -1558,7 +1698,7 @@ function toggleKoso(mode) {
   document.getElementById('kosoYes').classList.toggle('selected',  mode==='yes');
   document.getElementById('kosoDetail').style.display = mode==='yes' ? 'block' : 'none';
   if (mode === 'none') { d.kosoEquip = []; d.kosoSupply = null; }
-  document.getElementById('next14').disabled = false;
+  document.getElementById('next13').disabled = false;
 }
 
 // 高所作業の使用機材を選択する
@@ -1588,7 +1728,7 @@ function toggleToku(mode) {
   document.getElementById('tokNone').classList.toggle('selected', mode==='none');
   document.getElementById('tokYes').classList.toggle('selected',  mode==='yes');
   document.getElementById('tokuDetail').style.display = mode==='yes' ? 'block' : 'none';
-  document.getElementById('next16').disabled = false;
+  document.getElementById('next15').disabled = false;
 }
 
 // ══════════════════════════════════════
@@ -1615,6 +1755,42 @@ function buildPoleText(r) {
     return '　ポール' + (i + 1) + '：' + fmt(it);
   });
   return 'ポール新設　：あり（' + count + '本）\n' + lines.join('\n');
+}
+
+// LAN区間情報をレポート用テキストに変換する
+function buildLanSegmentsText(r) {
+  const segs = normalizeLanSegments(r);
+  if (!segs.length) return '配線　　　：未設定';
+  const total = segs.reduce((s, x) => s + (parseFloat(x.length) || 0), 0);
+  const lines = ['配線（LAN）：合計 ' + total + 'm'];
+  segs.forEach(function(s, i) {
+    const tag = '　区間' + (i + 1) + '：';
+    const method = s.wiring + (s.wiring === '配管' && s.pipeType ? '（' + s.pipeType + '）' : '');
+    lines.push(tag + method + '　' + (s.length || 0) + 'm');
+  });
+  return lines.join('\n');
+}
+
+// 旧フィールド（wiring/lanPipeType/lanLength）を持つレポートを区間配列に正規化
+function normalizeLanSegments(r) {
+  if (Array.isArray(r.lanSegments) && r.lanSegments.length > 0) {
+    return r.lanSegments.map(function(s) {
+      return {
+        wiring: s.wiring || '',
+        pipeType: s.pipeType || null,
+        length: parseFloat(s.length) || 0,
+      };
+    });
+  }
+  // レガシー互換：旧フィールドから1区間に変換
+  if (r.wiring && r.wiring !== '未選択') {
+    return [{
+      wiring: r.wiring,
+      pipeType: r.lanPipeType || null,
+      length: parseFloat(r.lanLength) || 0,
+    }];
+  }
+  return [];
 }
 
 // アーム取付情報をレポート用テキストに変換する
@@ -1767,8 +1943,7 @@ ${armHandlingLine}
 ${powerText}
 
 【配線・工事】
-配線方法　：${r.wiring}
-LANケーブル：${r.lanLength}m
+${buildLanSegmentsText(r)}
 配線支持材　：${r.wireSupport || '未記入'}
 
 ${buildWorkPlanText(r)}
@@ -1829,9 +2004,7 @@ function generateReport() {
     cameraCounts,
     armData:      JSON.parse(JSON.stringify(d.armData||{})),
     armText:      buildGroupArmText(powerGroups) || buildArmText(d.armData),
-    wiring:       d.wiring || '未選択',
-    lanPipeType:  d.lanPipeType || null,
-    lanLength:    document.getElementById('lanLength').value,
+    lanSegments:  JSON.parse(JSON.stringify(d.lanSegments || [])),
     wireSupport:  document.getElementById('wireSupport').value,
     powerGroups:  JSON.parse(JSON.stringify(powerGroups||[])),
     lanChange:    JSON.parse(JSON.stringify(d.lanChange||{})),
@@ -2103,7 +2276,7 @@ function renderList() {
         ${makeEditItem(r.id,'area','🗾 エリア',r.area||'未選択','choice',['都内','関東','東北','関西','九州','北海道'])}
         ${makeEditItem(r.id,'sekouSho','📌 施工箇所',r.sekouSho,'text')}
         <div class="cedit-section-label" style="margin-top:10px;">作業計画</div>
-        ${makeEditItem(r.id,'wiring','🔌 配線方法',r.wiring,'choice',['露出','配管','天井内'])}
+        ${buildLanSegmentsReadOnly(r)}
         ${r.haizai ? makeEditItem(r.id,'haizai','♻️ 廃材処理',r.haizai,'choice',['引き取り（バカン）','施工会社が処分','現地残置','未定']) : ''}
         ${r.armHandling ? makeEditItem(r.id,'armHandling','🔧 アーム手配',r.armHandling,'choice',['バカン','施工会社','未定']) : ''}
         <div style="display:flex;gap:8px;margin-top:12px;">
@@ -2113,6 +2286,23 @@ function renderList() {
       </div>
     </div>`;
   }).join('');
+}
+
+// LAN区間情報を読み取り専用でカード編集パネルに表示する
+function buildLanSegmentsReadOnly(r) {
+  const segs = normalizeLanSegments(r);
+  if (!segs.length) {
+    return '<div class="cedit-item"><div class="cedit-item-label">🔌 LAN配線</div><div class="cedit-item-current">未設定</div></div>';
+  }
+  const total = segs.reduce(function(s, x) { return s + (parseFloat(x.length) || 0); }, 0);
+  const rows = segs.map(function(s, i) {
+    const method = (s.wiring || '') + (s.wiring === '配管' && s.pipeType ? '（' + s.pipeType + '）' : '');
+    return '<div style="font-size:12px;padding:4px 0;color:var(--text-dim);">区間' + (i + 1) + '：' + method + '　' + (s.length || 0) + 'm</div>';
+  }).join('');
+  return '<div class="cedit-item">' +
+    '<div class="cedit-item-label">🔌 LAN配線（合計' + total + 'm）</div>' +
+    '<div class="cedit-item-current" style="cursor:default;">' + rows + '</div>' +
+    '</div>';
 }
 
 // カード編集用の入力欄HTMLを生成する
@@ -2286,10 +2476,14 @@ function resetAll() {
   document.querySelectorAll('.arm-sub-total span').forEach(el=>el.textContent='0');
   document.querySelectorAll('#armCnt_pole, #armCnt_none').forEach(el=>el.textContent='0');
   powerGroups = []; powerGid = 0;
-  document.getElementById('lanLength').value='10';
-  document.getElementById('lanLengthVal').textContent='10';
-  const lpWrap = document.getElementById('lanPipeTypeWrap');
-  if (lpWrap) lpWrap.style.display = 'none';
+  d.lanSegments = [];
+  lanSegId = 0;
+  const lanList = document.getElementById('lanSegmentList');
+  if (lanList) lanList.innerHTML = '';
+  const lanTotal = document.getElementById('lanTotalNum');
+  if (lanTotal) lanTotal.textContent = '0';
+  const wireSupport = document.getElementById('wireSupport');
+  if (wireSupport) wireSupport.value = '';
   showStep(1);
 }
 // 入力タブ/保存済みタブを切り替える
