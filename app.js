@@ -843,6 +843,7 @@ function showStep(n) {
   if (n === 12) initPowerStep();
   if (n === 13) buildWorkStep();
   if (n === 11) buildLanQueryVisibility();
+  if (n === 10) buildWiringVisibility();
   // 新Step9（アーム手配）：すべて「なし」ならスキップ
   if (n === 9 && isAllNoArm()) { step=10; showStep(10); return; }
   // 新Step15（廃材処理）：設置工事ならスキップ
@@ -953,6 +954,37 @@ function pickLanPipeType(btn, val) {
   d.lanPipeType = val;
   const nb = document.getElementById('next10');
   if (nb) nb.disabled = false;
+}
+
+// Step10 を表示するとき d.wiring / d.lanPipeType から配線方法・サブUI状態を復元する
+function buildWiringVisibility() {
+  const step10 = document.querySelector('[data-step="10"]');
+  if (!step10) return;
+  const wrap = document.getElementById('lanPipeTypeWrap');
+  const nb = document.getElementById('next10');
+
+  // 配線方法ボタン（外側 col3）の selected を d.wiring から復元
+  step10.querySelectorAll('.btn-grid.col3 .choice-btn').forEach(function(b) {
+    const onc = b.getAttribute('onclick') || '';
+    b.classList.toggle('selected', !!d.wiring && onc.indexOf("'" + d.wiring + "'") !== -1);
+  });
+
+  if (d.wiring === '配管') {
+    if (wrap) {
+      wrap.style.display = 'block';
+      wrap.querySelectorAll('.choice-btn').forEach(function(b) {
+        const onc = b.getAttribute('onclick') || '';
+        b.classList.toggle('selected', !!d.lanPipeType && onc.indexOf("'" + d.lanPipeType + "'") !== -1);
+      });
+    }
+    if (nb) nb.disabled = !d.lanPipeType;
+  } else {
+    if (wrap) {
+      wrap.style.display = 'none';
+      wrap.querySelectorAll('.choice-btn').forEach(function(b) { b.classList.remove('selected'); });
+    }
+    if (nb) nb.disabled = !d.wiring;
+  }
 }
 
 // IPカメラ＋ステレオカメラの合計台数を返す（グループデータから集計）
