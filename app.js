@@ -51,7 +51,7 @@ const OFFICES = [
 ];
 
 // 総ステップ数
-const TOTAL = 15;
+const TOTAL = 14;
 // 選択可能な機器種別の定義（キー名・アイコン）
 const DEVICE_DEFS = [
   { key: 'IPカメラ',     icon: '📷' },
@@ -198,7 +198,7 @@ function renderPowerGroups() {
   var totalEl = document.getElementById('powerTotalNum');
   if (totalEl) totalEl.textContent = sysTotal;
   var badge = document.getElementById('powerStatusBadge');
-  var nextBtn = document.getElementById('next11');
+  var nextBtn = document.getElementById('next10');
   var allDone = powerGroups.length > 0 && powerGroups.every(function(g){return isPowerGroupComplete(g);});
   if (allDone) {
     if (badge) { badge.className = 'arm-status-badge ok'; badge.textContent = '✓ 完了'; }
@@ -842,14 +842,14 @@ function showStep(n) {
   if (t) t.classList.add('active');
   updateProgress();
   if (n === 3) buildDateStep();
-  if (n === 8) initGroupArmStep();
-  if (n === 10) initLanStep();
-  if (n === 11) initPowerStep();
-  if (n === 12) buildWorkStep();
-  // 新Step9（アーム手配）：すべて「なし」ならスキップ
-  if (n === 9 && isAllNoArm()) { step=10; showStep(10); return; }
-  // 新Step14（廃材処理）：設置工事ならスキップ
-  if (n === 14 && d.kojiType === '設置') { step=15; showStep(15); return; }
+  if (n === 7) initGroupArmStep();
+  if (n === 9) initLanStep();
+  if (n === 10) initPowerStep();
+  if (n === 11) buildWorkStep();
+  // Step8（アーム手配）：すべて「なし」ならスキップ
+  if (n === 8 && isAllNoArm()) { step=9; showStep(9); return; }
+  // Step13（廃材処理）：設置工事ならスキップ
+  if (n === 13 && d.kojiType === '設置') { step=14; showStep(14); return; }
 }
 
 // LAN変更確認ブロック（交換/移設のみ表示）の表示制御と選択状態の復元
@@ -889,7 +889,7 @@ function isAllNoArm() {
   return keys.length === 0 || (keys.length===1 && keys[0]==='none');
 }
 // スキップするステップ番号のSet（場所確定時にStep6を追加）
-const SKIP_STEPS = new Set([7]);
+const SKIP_STEPS = new Set([]);
 
 // 場所確定状態を管理する（確定時はStep6をSKIP_STEPSに追加）
 function setLocationConfirmed(confirmed) {
@@ -1007,7 +1007,7 @@ function isLanSegComplete(s) {
 
 // 全区間入力済みかつ次へボタンの有効化を制御
 function updateLanNextBtn() {
-  const nb = document.getElementById('next10');
+  const nb = document.getElementById('next9');
   if (!nb) return;
   const allOk = d.lanSegments.length > 0 && d.lanSegments.every(isLanSegComplete);
   nb.disabled = !allOk;
@@ -1177,13 +1177,13 @@ function validateGroupsForStep8() {
 }
 
 // Step8 次へ処理（統合バリデーション）
-function tryNextStep8() {
+function tryNextStep7() {
   var v = validateGroupsForStep8();
   if (!v.ok) {
     showToast(v.issues[0], 'red');
     return;
   }
-  step = 9; showStep(step);
+  step = 8; showStep(step);
 }
 
 // ══════════════════════════════════════
@@ -1436,7 +1436,7 @@ function updateGroupCamStatus() {
     sumEl.textContent = parts.join(' / ');
   }
   const badge = document.getElementById('groupCamBadge');
-  const nextBtn = document.getElementById('next8');
+  const nextBtn = document.getElementById('next7');
   if (v.ok) {
     if (badge) { badge.className = 'arm-status-badge ok'; badge.textContent = '✓ OK'; }
     if (nextBtn) nextBtn.disabled = false;
@@ -1629,7 +1629,7 @@ function buildWorkStep() {
      d.kojiType==='交換' ? '交換工事の作業計画' :
      d.kojiType==='移設' ? '移設工事の作業計画' :
      '設置工事の作業計画');
-  document.getElementById('step11Title').textContent = title;
+  document.getElementById('step10Title').textContent = title;
   if (!d.workPlan) d.workPlan = {};
   if (isKasetsu) {
     buildWorkSection('install');
@@ -1698,7 +1698,7 @@ function toggleKoso(mode) {
   document.getElementById('kosoYes').classList.toggle('selected',  mode==='yes');
   document.getElementById('kosoDetail').style.display = mode==='yes' ? 'block' : 'none';
   if (mode === 'none') { d.kosoEquip = []; d.kosoSupply = null; }
-  document.getElementById('next13').disabled = false;
+  document.getElementById('next12').disabled = false;
 }
 
 // 高所作業の使用機材を選択する
@@ -1728,7 +1728,7 @@ function toggleToku(mode) {
   document.getElementById('tokNone').classList.toggle('selected', mode==='none');
   document.getElementById('tokYes').classList.toggle('selected',  mode==='yes');
   document.getElementById('tokuDetail').style.display = mode==='yes' ? 'block' : 'none';
-  document.getElementById('next15').disabled = false;
+  document.getElementById('next14').disabled = false;
 }
 
 // ══════════════════════════════════════
@@ -2543,8 +2543,7 @@ document.addEventListener('keydown', function(e) {
 
 // 現在のステップを自動で次へ進める
 function advanceFromCurrentStep() {
-  if (step === 8) { tryNextStep8(); return; }
-  if (step === 9) { tryNextStep9(); return; }
+  if (step === 7) { tryNextStep7(); return; }
   const nb = document.getElementById('next'+step);
   if (nb && !nb.disabled) nb.click();
   else if (!nb) {

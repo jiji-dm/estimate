@@ -179,8 +179,8 @@
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>
 
-      <!-- Step 8: システム・機器・カメラ・アーム（統合） -->
-      <div class="step" data-step="8">
+      <!-- Step 7: システム・機器・カメラ・アーム（統合） -->
+      <div class="step" data-step="7">
         <div class="step-q">システム・機器の設定</div>
         <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">
           グループごとに「システム台数・機器種別・台数・アーム」を入力してください。<br>
@@ -199,24 +199,24 @@
         <div id="groupCamArmList"></div>
         <button class="add-group-btn" onclick="addPowerGroup()">＋ グループを追加</button>
 
-        <button class="next-btn" id="next8" onclick="tryNextStep8()" disabled>次へ →</button>
+        <button class="next-btn" id="next7" onclick="tryNextStep7()" disabled>次へ →</button>
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>
 
-      <!-- Step 9: アーム手配（旧Step 16） -->
-      <div class="step" data-step="9">
+      <!-- Step 8: アーム手配 -->
+      <div class="step" data-step="8">
         <div class="step-q">アームの手配はどうしますか？</div>
         <div class="btn-grid col3">
           <button class="choice-btn" onclick="pick(this,'armHandling','バカン')"><span class="icon">🏢</span>バカン</button>
           <button class="choice-btn" onclick="pick(this,'armHandling','施工会社')"><span class="icon">🔧</span>施工会社</button>
           <button class="choice-btn" onclick="pick(this,'armHandling','未定')"><span class="icon">❓</span>未定</button>
         </div>
-        <button class="next-btn" id="next9" onclick="nextStep()" disabled>次へ →</button>
+        <button class="next-btn" id="next8" onclick="nextStep()" disabled>次へ →</button>
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>
 
-      <!-- Step 10: LANケーブル配線（区間ごと） -->
-      <div class="step" data-step="10">
+      <!-- Step 9: LANケーブル配線（区間ごと） -->
+      <div class="step" data-step="9">
         <div class="step-q">LANケーブルの配線</div>
         <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">配線方法・配管種別ごとに区間を分けて入力してください</div>
 
@@ -252,12 +252,12 @@
         <div class="field-label" style="margin-top:14px;">配線支持材</div>
         <textarea class="text-input" id="wireSupport" rows="1" placeholder="例）モール、インシュロック、ステープル等"></textarea>
 
-        <button class="next-btn" id="next10" onclick="nextStep()">次へ →</button>
+        <button class="next-btn" id="next9" onclick="nextStep()">次へ →</button>
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>
 
-      <!-- Step 11: 電源供給（旧Step 12） -->
-      <div class="step" data-step="11">
+      <!-- Step 10: 電源供給 -->
+      <div class="step" data-step="10">
         <div class="step-q">電源供給の設定</div>
         <div style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">グループごとに電源条件を入力してください</div>
 
@@ -274,13 +274,13 @@
 
         <div id="powerGroupList"></div>
 
-        <button class="next-btn" id="next11" onclick="nextStep()" disabled>次へ →</button>
+        <button class="next-btn" id="next10" onclick="nextStep()" disabled>次へ →</button>
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>
 
-      <!-- Step 12: 作業計画（旧Step 13） -->
-      <div class="step" data-step="12">
-        <div class="step-q" id="step11Title">作業計画</div>
+      <!-- Step 11: 作業計画 -->
+      <div class="step" data-step="11">
+        <div class="step-q" id="step10Title">作業計画</div>
 
         <!-- 設置・撤去（単独） -->
         <div id="workBlock_single">
@@ -306,8 +306,8 @@
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>
 
-      <!-- Step 13: 高所作業（旧Step 14） -->
-      <div class="step" data-step="13">
+      <!-- Step 12: 高所作業 -->
+      <div class="step" data-step="12">
         <div class="step-q">高所作業はありますか？</div>
         <div class="toggle-row">
           <button class="toggle-btn" id="kosoNone" onclick="toggleKoso('none')">🚶 なし</button>
@@ -346,12 +346,12 @@
 
         </div>
         <div style="height:16px;"></div>
-        <button class="next-btn" id="next13" onclick="nextStep()" disabled>次へ →</button>
+        <button class="next-btn" id="next12" onclick="nextStep()" disabled>次へ →</button>
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>
 
-      <!-- Step 14: 廃材処理（撤去・仮設のみ） -->
-      <div class="step" data-step="14">
+      <!-- Step 13: 廃材処理（撤去・仮設のみ） -->
+      <div class="step" data-step="13">
         <div class="step-q">廃材の処理はどうしますか？</div>
         <div class="btn-grid" id="haizaiGrid">
           <button class="choice-btn" onclick="pick(this,'haizai','引き取り（バカン）')"><span class="icon">🚛</span>引き取り<small class="sub">バカンが回収</small></button>
@@ -360,12 +360,12 @@
           <button class="choice-btn" onclick="pick(this,'haizai','未定')"><span class="icon">❓</span>未定</button>
         </div>
         <textarea class="text-input" id="haizaiNote" rows="1" placeholder="備考（任意）" style="margin-top:4px;"></textarea>
-        <button class="next-btn" id="next14" onclick="nextStep()" disabled>次へ →</button>
+        <button class="next-btn" id="next13" onclick="nextStep()" disabled>次へ →</button>
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>
 
-      <!-- Step 15: 特別条件（旧Step 16） -->
-      <div class="step" data-step="15">
+      <!-- Step 14: 特別条件 -->
+      <div class="step" data-step="14">
         <div class="step-q">その他特別条件はありますか？</div>
         <div class="toggle-row">
           <button class="toggle-btn" id="tokNone" onclick="toggleToku('none')">✅ なし</button>
@@ -375,7 +375,7 @@
           <textarea class="text-input" id="tokuText" rows="3" placeholder="例）電源工事が別途必要、養生必須、入館証要など"></textarea>
         </div>
         <div style="height:16px;"></div>
-        <button class="next-btn" id="next15" onclick="generateReport()" disabled>レポートを生成 ✨</button>
+        <button class="next-btn" id="next14" onclick="generateReport()" disabled>レポートを生成 ✨</button>
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>
     </div>
