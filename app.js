@@ -889,7 +889,7 @@ function isAllNoArm() {
   return keys.length === 0 || (keys.length===1 && keys[0]==='none');
 }
 // スキップするステップ番号のSet（場所確定時にStep6を追加）
-const SKIP_STEPS = new Set([]);
+const SKIP_STEPS = new Set([7]);
 
 // 場所確定状態を管理する（確定時はStep6をSKIP_STEPSに追加）
 function setLocationConfirmed(confirmed) {
@@ -1931,7 +1931,6 @@ ${buildWorkDateText(r)}
 工事場所　：${r.location}
 ${areaLine}
 ${poleLine}
-施工箇所　：${r.sekouSho}
 ${haizaiLine}
 
 【機器情報】
@@ -1990,7 +1989,6 @@ function generateReport() {
     timeZone:     d.timeZone || '未選択',
     kojiType:     d.kojiType || '未選択',
     location:     d.location || '未選択',
-    sekouSho:     document.getElementById('sekouSho').value || '未入力',
     haizai:       d.haizai || '',
     haizaiNote:   (document.getElementById('haizaiNote') && document.getElementById('haizaiNote').value) || '',
     armHandling:  d.armHandling || '',
@@ -2274,7 +2272,6 @@ function renderList() {
         ${makeEditItem(r.id,'timeZone','🕐 時間帯',r.timeZone,'choice',['日中','夜間'])}
         ${makeEditItem(r.id,'location','📍 工事場所',r.location,'choice',['屋内','屋外'])}
         ${makeEditItem(r.id,'area','🗾 エリア',r.area||'未選択','choice',['都内','関東','東北','関西','九州','北海道'])}
-        ${makeEditItem(r.id,'sekouSho','📌 施工箇所',r.sekouSho,'text')}
         <div class="cedit-section-label" style="margin-top:10px;">作業計画</div>
         ${buildLanSegmentsReadOnly(r)}
         ${r.haizai ? makeEditItem(r.id,'haizai','♻️ 廃材処理',r.haizai,'choice',['引き取り（バカン）','施工会社が処分','現地残置','未定']) : ''}
@@ -2352,7 +2349,7 @@ function saveCardEdit(rid) {
   const list = getSaved();
   const r = list.find(x => x.id === rid);
   if (!r) return;
-  const keys = ['siteName','sekouSho'];
+  const keys = ['siteName'];
   keys.forEach(key => {
     const el = document.getElementById(`cei_${rid}_${key}`);
     if (el) r[key] = el.value;
