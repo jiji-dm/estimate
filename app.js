@@ -835,7 +835,7 @@ function updateProgress() {
   document.getElementById('progressFill').style.width = ((step-1)/TOTAL*100) + '%';
   document.getElementById('progressNum').textContent = String(step).padStart(2,'0') + ' / ' + String(TOTAL).padStart(2,'0');
 }
-// 指定ステップを表示する（スキップステップは自動スルー）
+// 指定ステップを表示する
 function showStep(n) {
   document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
   const t = document.querySelector('[data-step="'+n+'"]');
@@ -846,10 +846,6 @@ function showStep(n) {
   if (n === 9) initLanStep();
   if (n === 10) initPowerStep();
   if (n === 11) buildWorkStep();
-  // Step8（アーム手配）：すべて「なし」ならスキップ
-  if (n === 8 && isAllNoArm()) { step=9; showStep(9); return; }
-  // Step13（廃材処理）：設置工事ならスキップ
-  if (n === 13 && d.kojiType === '設置') { step=14; showStep(14); return; }
 }
 
 // LAN変更確認ブロック（交換/移設のみ表示）の表示制御と選択状態の復元
@@ -902,25 +898,35 @@ function setLocationConfirmed(confirmed) {
   }
 }
 
+// 指定ステップがスキップ対象か判定（SKIP_STEPSおよび条件付きスキップ）
+function isStepSkipped(n) {
+  if (SKIP_STEPS.has(n)) return true;
+  // Step8（アーム手配）：すべて「なし」ならスキップ
+  if (n === 8 && isAllNoArm()) return true;
+  // Step13（廃材処理）：設置工事ならスキップ
+  if (n === 13 && d.kojiType === '設置') return true;
+  return false;
+}
+
 // エリア選択ステップをスキップして次ステップへ進む
 function skipAreaStep() {
   d.area = '';
   d.areaDetail = '';
   d.officeDistances = null;
   let n = step + 1;
-  while (SKIP_STEPS.has(n)) n++;
+  while (n <= TOTAL && isStepSkipped(n)) n++;
   if (n <= TOTAL) { step = n; showStep(step); }
 }
-// 次のステップへ進む（SKIP_STEPSに含まれるステップは飛ばす）
+// 次のステップへ進む（スキップ対象は飛ばす）
 function nextStep() {
   let n = step + 1;
-  while (SKIP_STEPS.has(n)) n++;
+  while (n <= TOTAL && isStepSkipped(n)) n++;
   if (n <= TOTAL) { step = n; showStep(step); }
 }
-// 前のステップへ戻る（SKIP_STEPSに含まれるステップは飛ばす）
+// 前のステップへ戻る（スキップ対象は飛ばす）
 function prevStep() {
   let n = step - 1;
-  while (SKIP_STEPS.has(n)) n--;
+  while (n >= 1 && isStepSkipped(n)) n--;
   if (n >= 1) { step = n; showStep(step); }
 }
 // 汎用選択ボタン処理（d[key]に値をセットし次へボタンを有効化）
@@ -1200,7 +1206,7 @@ function tryNextStep7() {
     showToast(v.issues[0], 'red');
     return;
   }
-  step = 8; showStep(step);
+  nextStep();
 }
 
 // ══════════════════════════════════════
