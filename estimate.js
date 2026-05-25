@@ -101,6 +101,35 @@ function calcEstimate(r) {
     }
   }
 
+  // サイネージ取付費／撤去費／移設費
+  const signageTotal = (r.powerGroups || []).reduce(function(s, g) {
+    return s + (g.deviceType === 'signage' ? (g.count || 0) : 0);
+  }, 0);
+  if (signageTotal > 0) {
+    const sigKoji = r.kojiType;
+    const sigInstall = sigKoji !== '撤去' && sigKoji !== '移設';
+    const sigRemove = sigKoji === '撤去' || sigKoji === '仮設' || sigKoji === '交換';
+    const sigRelocate = sigKoji === '移設';
+
+    if (sigInstall) {
+      const fee = signageTotal * 50000;
+      lines.push({ label: `サイネージ取付費（${signageTotal}台 × ¥50,000）`, val: fee });
+      total += fee;
+    }
+    if (sigRemove) {
+      // 補足：推定金額
+      const fee = signageTotal * 30000;
+      lines.push({ label: `サイネージ撤去費（${signageTotal}台 × ¥30,000・推定金額）`, val: fee });
+      total += fee;
+    }
+    if (sigRelocate) {
+      // 補足：推定金額
+      const fee = signageTotal * 20000;
+      lines.push({ label: `サイネージ移設費（${signageTotal}台 × ¥20,000・推定金額）`, val: fee });
+      total += fee;
+    }
+  }
+
   // LAN配線：区間ベース計算（旧フィールドからのフォールバックも対応）
   const lanSegs = getLanSegments(r);
   const lan = lanSegs.reduce(function(s, x) { return s + (parseFloat(x.length) || 0); }, 0);
