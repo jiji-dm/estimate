@@ -9,6 +9,64 @@ const PIPE_RATES = {
   '露出': 100,
 };
 
+// アーム取付方法ごとの単価。天吊ボルトと不明はトグル（数量なし）で別管理。
+const ARM_METHOD_PRICES = {
+  wall: { 'ビス': 0, 'アーム': 10000, 'マグネット': 10000, 'ブラケット': 25000 },
+  pole: { 'マウント': 5000, 'ブラケット': 25000, 'パラペット': 20000 },
+  ceil: { 'ビス': 0, 'アーム': 10000, 'マグネット': 10000 },
+};
+
+// グループの armData から取付方法別の費用明細を生成する
+function buildArmMethodLines(groups) {
+  const out = [];
+  (groups || []).forEach(function(g, gi) {
+    const ad = g.armData || {};
+    const sysN = Math.max(1, g.count || 1);
+    const camN = (g.camIP || 0) + (g.camStereo || 0);
+    const gTag = (groups.length > 1)
+      ? ' [' + ((g.groupName && g.groupName.trim()) || ('グループ' + (gi + 1))) + ']'
+      : '';
+    // 数量管理されている取付方法
+    ['wall', 'pole', 'ceil'].forEach(function(armKey) {
+      const methods = ad[armKey];
+      if (!methods || typeof methods !== 'object') return;
+      Object.entries(methods).forEach(function(e) {
+        const method = e[0], cnt = e[1] || 0;
+        if (cnt <= 0) return;
+        const rate = (ARM_METHOD_PRICES[armKey] || {})[method];
+        if (typeof rate === 'number' && rate > 0) {
+          const fee = rate * cnt;
+          const armLabel = armKey === 'wall' ? '壁付け' : armKey === 'pole' ? 'ポール' : '天井';
+          out.push({
+            label: 'アーム取付（' + armLabel + '・' + method + '）' + gTag
+              + '（' + cnt + '台 × ' + fmtYen(rate) + '）',
+            val: fee
+          });
+        }
+      });
+    });
+    // 天吊ボルト：グループ単位で 8000*sys + 8000*cam + 30000
+    if (ad.boltOn) {
+      const fee = 8000 * sysN + 8000 * camN + 30000;
+      out.push({
+        label: 'アーム取付（天吊ボルト）' + gTag
+          + '（sys' + sysN + '×¥8,000 + cam' + camN + '×¥8,000 + ¥30,000）',
+        val: fee
+      });
+    }
+    // 不明＋予備費「有」：cam × ¥10,000
+    if (ad.unknownOn && ad.reserveFee === 'yes' && camN > 0) {
+      const fee = camN * 10000;
+      out.push({
+        label: 'アーム取付・予備費（不明）' + gTag
+          + '（cam' + camN + '×¥10,000）',
+        val: fee
+      });
+    }
+  });
+  return out;
+}
+
 // LAN区間配列を取得する（旧フィールドからのフォールバック対応）
 function getLanSegments(r) {
   if (Array.isArray(r.lanSegments) && r.lanSegments.length > 0) {
@@ -99,6 +157,12 @@ function calcEstimate(r) {
         total += extraFee;
       }
     }
+  }
+
+  // アーム取付費（設置系のみ：撤去では計上しない）
+  if (r.kojiType !== '撤去') {
+    const armLines = buildArmMethodLines(groups);
+    armLines.forEach(function(l) { lines.push(l); total += l.val; });
   }
 
   // サイネージ取付費／撤去費／移設費

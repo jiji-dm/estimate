@@ -60,6 +60,51 @@ const DEVICE_DEFS = [
   { key: 'Lidar',       icon: '📡' },
 ];
 
+// アーム種別ごとの取付方法と単価。天吊ボルト・不明は数量ではなくトグル（後段で別管理）
+const ARM_METHODS = {
+  wall: [
+    { key: 'ビス',      price: 0 },
+    { key: 'アーム',    price: 10000 },
+    { key: 'マグネット', price: 10000 },
+    { key: 'ブラケット', price: 25000 },
+  ],
+  pole: [
+    { key: 'マウント',   price: 5000 },
+    { key: 'ブラケット', price: 25000 },
+    { key: 'パラペット', price: 20000 },
+  ],
+  ceil: [
+    { key: 'ビス',      price: 0 },
+    { key: 'アーム',    price: 10000 },
+    { key: 'マグネット', price: 10000 },
+  ],
+};
+const ARM_LABELS = { wall: '🔩 壁付け', pole: '🏗️ ポール', ceil: '⬆️ 天井', none: '🚫 なし' };
+
+// 指定アーム種別の合計台数を返す。none は数値、それ以外は { method: count } の合計。
+function armKeyTotal(armData, key) {
+  if (!armData || armData[key] == null) return 0;
+  if (key === 'none') return Number(armData.none) || 0;
+  if (typeof armData[key] === 'number') return armData[key];
+  return Object.values(armData[key]).reduce(function(s, n) { return s + (Number(n) || 0); }, 0);
+}
+
+// 数量管理されているアーム（壁付け/ポール/天井/なし）の合計。天吊ボルト・不明トグルは含まない。
+function armQtyTotal(armData) {
+  return armKeyTotal(armData, 'wall') + armKeyTotal(armData, 'pole')
+       + armKeyTotal(armData, 'ceil') + armKeyTotal(armData, 'none');
+}
+
+// グループ全体のアーム合計。天吊ボルト・不明トグルONならcam全部とみなす
+function armTotalForGroup(g) {
+  if (!g) return 0;
+  var ad = g.armData || {};
+  var camN = (g.camIP || 0) + (g.camStereo || 0);
+  if (ad.boltOn) return camN;
+  if (ad.unknownOn) return camN;
+  return armQtyTotal(ad);
+}
+
 // アプリ全体の状態変数（step:現在ステップ / d:入力値 / kosoMode:高所作業 / tokuMode:特記事項 / currentReport:生成済みレポート / modalReport:モーダル表示中レポート）
 let step = 1, d = {}, kosoMode = null, tokuMode = null, currentReport = null, modalReport = null;
 // d の初期値設定
@@ -878,7 +923,8 @@ function isAllNoArm() {
   // グループのarmDataを確認
   const hasGroupArm = powerGroups.some(function(g) {
     const ad = g.armData || {};
-    return (ad.wall || 0) > 0 || (ad.pole || 0) > 0 || (ad.ceil || 0) > 0;
+    return armKeyTotal(ad, 'wall') > 0 || armKeyTotal(ad, 'pole') > 0
+        || armKeyTotal(ad, 'ceil') > 0 || !!ad.boltOn || !!ad.unknownOn;
   });
   if (powerGroups.length > 0) return !hasGroupArm;
   // fallback: 旧d.armData
@@ -1237,10 +1283,7 @@ function groupDeviceSummary(g) {
   if (g.deviceType === 'signage') return 'サイネージ×' + (g.count || 0) + '台';
   if (g.deviceType === 'lidar')   return 'Lidar×' + (g.count || 0) + '台';
   var cam = (g.camIP || 0) + (g.camStereo || 0);
-  var arm = (g.armData||{}).wall||0;
-  arm += (g.armData||{}).pole||0;
-  arm += (g.armData||{}).ceil||0;
-  arm += (g.armData||{}).none||0;
+  var arm = armTotalForGroup(g);
   return 'sys' + (g.count||0) + '台・cam' + cam + '台・arm' + arm + '/' + cam;
 }
 
@@ -1249,7 +1292,7 @@ function buildGroupCamArmDOM(g, idx) {
   var deviceType = g.deviceType || 'camera';
   var totalCam = (g.camIP || 0) + (g.camStereo || 0);
   var armData = g.armData || {};
-  var armTotal = (armData.wall || 0) + (armData.pole || 0) + (armData.ceil || 0) + (armData.none || 0);
+  var armTotal = armTotalForGroup(g);
   var displayTitle = (g.groupName && g.groupName.trim()) ? g.groupName.trim() : 'グループ ' + (idx + 1);
 
   var wrap = document.createElement('div');
@@ -1369,30 +1412,138 @@ function buildGroupCamArmDOM(g, idx) {
       armLabel.textContent = '🔩 アーム取付方法・台数（カメラ合計と一致が必要）';
       body.appendChild(armLabel);
 
-      var armKeys = [
-        { key: 'wall', label: '🔩 壁付け' },
-        { key: 'pole', label: '🏗️ ポール' },
-        { key: 'ceil', label: '⬆️ 天井' },
-        { key: 'none', label: '🚫 なし' },
-      ];
       if (!g.armData) g.armData = {};
-      armKeys.forEach(function(ak) {
-        var armRow = document.createElement('div');
-        armRow.className = 'power-count-row';
-        var armCnt = g.armData[ak.key] || 0;
-        var canIncArm = armTotal < totalCam;
-        armRow.innerHTML =
-          '<div class="power-count-label">' + ak.label + '</div>' +
-          '<div class="camera-count-ctrl">' +
-            '<button class="cnt-btn" id="ga_m_' + g.id + '_' + ak.key + '"' + (armCnt <= 0 ? ' disabled' : '') + '>−</button>' +
-            '<div class="cnt-val" style="font-size:18px;">' + armCnt + '</div>' +
-            '<button class="cnt-btn" id="ga_p_' + g.id + '_' + ak.key + '"' + (!canIncArm ? ' disabled' : '') + '>＋</button>' +
-            '<span style="font-size:11px;color:var(--text-dim);">台</span>' +
+      if (!g.armOpen) g.armOpen = {};
+      var ad = g.armData;
+      var hasBolt = !!ad.boltOn;
+      var hasUnknown = !!ad.unknownOn;
+      var hasQty = armQtyTotal(ad) > 0;
+      // 数量管理（壁付け/ポール/天井/なし）の+ボタンは、天吊ボルト or 不明 が選ばれているとき不可
+      var qtyBlocked = hasBolt || hasUnknown;
+
+      var armKeyDefs = [
+        { key: 'wall' }, { key: 'pole' }, { key: 'ceil' }, { key: 'none' },
+      ];
+      armKeyDefs.forEach(function(ak) {
+        var keyTotal = armKeyTotal(g.armData, ak.key);
+        var isOpen = !!g.armOpen[ak.key] || keyTotal > 0;
+
+        var headRow = document.createElement('div');
+        headRow.className = 'power-count-row';
+        headRow.style.cssText = 'cursor:pointer;';
+        var caret = isOpen ? '▾' : '▸';
+        headRow.innerHTML =
+          '<div class="power-count-label">' +
+            '<span style="display:inline-block;width:14px;color:var(--text-dim);">' + caret + '</span>' +
+            ARM_LABELS[ak.key] +
+            (keyTotal > 0 ? ' <span style="color:var(--text-dim);font-size:12px;">（' + keyTotal + '台）</span>' : '') +
           '</div>';
-        armRow.querySelector('#ga_m_' + g.id + '_' + ak.key).addEventListener('click', function() { pgArmCntChange(g.id, ak.key, -1); });
-        armRow.querySelector('#ga_p_' + g.id + '_' + ak.key).addEventListener('click', function() { pgArmCntChange(g.id, ak.key, 1); });
-        body.appendChild(armRow);
+        headRow.addEventListener('click', function() { pgArmToggle(g.id, ak.key); });
+        body.appendChild(headRow);
+
+        if (!isOpen) return;
+
+        if (ak.key === 'none') {
+          var noneRow = document.createElement('div');
+          noneRow.className = 'power-count-row';
+          noneRow.style.cssText = 'padding-left:18px;';
+          var canIncNone = (armQtyTotal(ad) < totalCam) && !qtyBlocked;
+          noneRow.innerHTML =
+            '<div class="power-count-label" style="font-size:12px;">台数</div>' +
+            '<div class="camera-count-ctrl">' +
+              '<button class="cnt-btn" id="ga_m_' + g.id + '_none"' + (keyTotal <= 0 ? ' disabled' : '') + '>−</button>' +
+              '<div class="cnt-val" style="font-size:18px;">' + keyTotal + '</div>' +
+              '<button class="cnt-btn" id="ga_p_' + g.id + '_none"' + (!canIncNone ? ' disabled' : '') + '>＋</button>' +
+              '<span style="font-size:11px;color:var(--text-dim);">台</span>' +
+            '</div>';
+          noneRow.querySelector('#ga_m_' + g.id + '_none').addEventListener('click', function(e) { e.stopPropagation(); pgArmNoneChange(g.id, -1); });
+          noneRow.querySelector('#ga_p_' + g.id + '_none').addEventListener('click', function(e) { e.stopPropagation(); pgArmNoneChange(g.id, 1); });
+          body.appendChild(noneRow);
+        } else {
+          ARM_METHODS[ak.key].forEach(function(m) {
+            var mCnt = (g.armData[ak.key] && g.armData[ak.key][m.key]) || 0;
+            var canIncM = (armQtyTotal(ad) < totalCam) && !qtyBlocked;
+            var priceLabel = m.price === 0 ? '¥0' : '¥' + m.price.toLocaleString();
+            var mRow = document.createElement('div');
+            mRow.className = 'power-count-row';
+            mRow.style.cssText = 'padding-left:18px;';
+            mRow.innerHTML =
+              '<div class="power-count-label" style="font-size:12px;">' + m.key +
+                ' <span style="color:var(--text-dim);">（' + priceLabel + '）</span></div>' +
+              '<div class="camera-count-ctrl">' +
+                '<button class="cnt-btn" id="ga_m_' + g.id + '_' + ak.key + '_' + m.key + '"' + (mCnt <= 0 ? ' disabled' : '') + '>−</button>' +
+                '<div class="cnt-val" style="font-size:18px;">' + mCnt + '</div>' +
+                '<button class="cnt-btn" id="ga_p_' + g.id + '_' + ak.key + '_' + m.key + '"' + (!canIncM ? ' disabled' : '') + '>＋</button>' +
+                '<span style="font-size:11px;color:var(--text-dim);">台</span>' +
+              '</div>';
+            mRow.querySelector('#ga_m_' + g.id + '_' + ak.key + '_' + m.key).addEventListener('click', function(e) {
+              e.stopPropagation(); pgArmMethodChange(g.id, ak.key, m.key, -1);
+            });
+            mRow.querySelector('#ga_p_' + g.id + '_' + ak.key + '_' + m.key).addEventListener('click', function(e) {
+              e.stopPropagation(); pgArmMethodChange(g.id, ak.key, m.key, 1);
+            });
+            body.appendChild(mRow);
+          });
+          // 天井サブの末尾に「天吊ボルト」トグル
+          if (ak.key === 'ceil') {
+            var boltRow = document.createElement('div');
+            boltRow.className = 'power-count-row';
+            boltRow.style.cssText = 'padding-left:18px;';
+            var boltLabel = '天吊ボルト ' +
+              '<span style="color:var(--text-dim);">（¥8,000×sys + ¥8,000×cam + ¥30,000）</span>';
+            var boltDisabled = hasQty || hasUnknown;
+            var boltBtnStyle = hasBolt
+              ? 'background:var(--accent);color:#fff;'
+              : (boltDisabled ? 'opacity:0.4;' : '');
+            boltRow.innerHTML =
+              '<div class="power-count-label" style="font-size:12px;">' + boltLabel + '</div>' +
+              '<button class="cnt-btn" id="ga_bolt_' + g.id + '" style="width:auto;padding:0 14px;' + boltBtnStyle + '"' +
+                ((!hasBolt && boltDisabled) ? ' disabled' : '') + '>' +
+                (hasBolt ? '✓ 選択中' : '選択') + '</button>';
+            boltRow.querySelector('#ga_bolt_' + g.id).addEventListener('click', function(e) {
+              e.stopPropagation(); pgArmBoltToggle(g.id);
+            });
+            body.appendChild(boltRow);
+          }
+        }
       });
+
+      // 「不明」セクション（トグル）
+      var unkHead = document.createElement('div');
+      unkHead.className = 'power-count-row';
+      unkHead.style.cssText = 'cursor:pointer;';
+      var unkDisabled = hasQty || hasBolt;
+      var unkBtnStyle = hasUnknown
+        ? 'background:var(--accent);color:#fff;'
+        : (unkDisabled ? 'opacity:0.4;' : '');
+      unkHead.innerHTML =
+        '<div class="power-count-label">❓ 不明</div>' +
+        '<button class="cnt-btn" id="ga_unk_' + g.id + '" style="width:auto;padding:0 14px;' + unkBtnStyle + '"' +
+          ((!hasUnknown && unkDisabled) ? ' disabled' : '') + '>' +
+          (hasUnknown ? '✓ 選択中' : '選択') + '</button>';
+      unkHead.querySelector('#ga_unk_' + g.id).addEventListener('click', function(e) {
+        e.stopPropagation(); pgArmUnknownToggle(g.id);
+      });
+      body.appendChild(unkHead);
+
+      // 不明ONなら予備費の選択を表示
+      if (hasUnknown) {
+        var reserveRow = document.createElement('div');
+        reserveRow.className = 'power-count-row';
+        reserveRow.style.cssText = 'padding-left:18px;';
+        var rf = ad.reserveFee || 'no';
+        var rfYesStyle = rf === 'yes' ? 'background:var(--accent);color:#fff;' : '';
+        var rfNoStyle  = rf === 'no'  ? 'background:var(--accent);color:#fff;' : '';
+        reserveRow.innerHTML =
+          '<div class="power-count-label" style="font-size:12px;">予備費</div>' +
+          '<div style="display:flex;gap:6px;">' +
+            '<button class="cnt-btn" id="ga_rf_yes_' + g.id + '" style="width:auto;padding:0 10px;font-size:12px;' + rfYesStyle + '">有（cam' + totalCam + '×¥10,000）</button>' +
+            '<button class="cnt-btn" id="ga_rf_no_'  + g.id + '" style="width:auto;padding:0 10px;font-size:12px;' + rfNoStyle  + '">無</button>' +
+          '</div>';
+        reserveRow.querySelector('#ga_rf_yes_' + g.id).addEventListener('click', function(e) { e.stopPropagation(); pgArmReserveSet(g.id, 'yes'); });
+        reserveRow.querySelector('#ga_rf_no_'  + g.id).addEventListener('click', function(e) { e.stopPropagation(); pgArmReserveSet(g.id, 'no'); });
+        body.appendChild(reserveRow);
+      }
 
       // アーム合計表示（一致しなければ赤）
       var match = armTotal === totalCam;
@@ -1438,12 +1589,69 @@ function pgCamChange(gid, type, delta) {
   renderGroupCamArmList();
 }
 
-// アーム台数を増減する
-function pgArmCntChange(gid, armKey, delta) {
+// アーム種別の展開/折りたたみを切り替える
+function pgArmToggle(gid, armKey) {
+  const g = powerGroups.find(x => x.id === gid);
+  if (!g) return;
+  if (!g.armOpen) g.armOpen = {};
+  g.armOpen[armKey] = !g.armOpen[armKey];
+  renderGroupCamArmList();
+}
+
+// アーム種別×取付方法の台数を増減する
+function pgArmMethodChange(gid, armKey, method, delta) {
   const g = powerGroups.find(x => x.id === gid);
   if (!g) return;
   if (!g.armData) g.armData = {};
-  g.armData[armKey] = Math.max(0, (g.armData[armKey] || 0) + delta);
+  if (!g.armData[armKey] || typeof g.armData[armKey] !== 'object') g.armData[armKey] = {};
+  g.armData[armKey][method] = Math.max(0, (g.armData[armKey][method] || 0) + delta);
+  renderGroupCamArmList();
+}
+
+// 「なし」の台数を増減する
+function pgArmNoneChange(gid, delta) {
+  const g = powerGroups.find(x => x.id === gid);
+  if (!g) return;
+  if (!g.armData) g.armData = {};
+  g.armData.none = Math.max(0, (Number(g.armData.none) || 0) + delta);
+  renderGroupCamArmList();
+}
+
+// 天吊ボルトのON/OFFを切り替える。他方法選択時はONにできない
+function pgArmBoltToggle(gid) {
+  const g = powerGroups.find(x => x.id === gid);
+  if (!g) return;
+  if (!g.armData) g.armData = {};
+  if (g.armData.boltOn) {
+    g.armData.boltOn = false;
+  } else {
+    if (armQtyTotal(g.armData) > 0 || g.armData.unknownOn) return;
+    g.armData.boltOn = true;
+  }
+  renderGroupCamArmList();
+}
+
+// 「不明」のON/OFFを切り替える。他方法選択時はONにできない
+function pgArmUnknownToggle(gid) {
+  const g = powerGroups.find(x => x.id === gid);
+  if (!g) return;
+  if (!g.armData) g.armData = {};
+  if (g.armData.unknownOn) {
+    g.armData.unknownOn = false;
+    g.armData.reserveFee = null;
+  } else {
+    if (armQtyTotal(g.armData) > 0 || g.armData.boltOn) return;
+    g.armData.unknownOn = true;
+    if (!g.armData.reserveFee) g.armData.reserveFee = 'no';
+  }
+  renderGroupCamArmList();
+}
+
+// 予備費の有無をセットする
+function pgArmReserveSet(gid, val) {
+  const g = powerGroups.find(x => x.id === gid);
+  if (!g || !g.armData || !g.armData.unknownOn) return;
+  g.armData.reserveFee = val;
   renderGroupCamArmList();
 }
 
@@ -1848,10 +2056,17 @@ function buildGroupSummaryText(groups) {
       var camStr = camLines.length ? camLines.join('・') : 'カメラなし';
       var ad = g.armData || {};
       var armLines = [];
-      if (ad.wall > 0) armLines.push('壁付け×' + ad.wall + '台');
-      if (ad.pole > 0) armLines.push('ポール×' + ad.pole + '台');
-      if (ad.ceil > 0) armLines.push('天井×' + ad.ceil + '台');
-      if (ad.none > 0) armLines.push('アームなし×' + ad.none + '台');
+      ['wall','pole','ceil'].forEach(function(k) {
+        if (!ad[k] || typeof ad[k] !== 'object') return;
+        Object.entries(ad[k]).forEach(function(e) {
+          var m = e[0], n = e[1];
+          if (n > 0) armLines.push(ARM_LABELS[k].replace(/^\S+\s/, '') + '・' + m + '×' + n + '台');
+        });
+      });
+      var noneN = armKeyTotal(ad, 'none');
+      if (noneN > 0) armLines.push('アームなし×' + noneN + '台');
+      if (ad.boltOn) armLines.push('天吊ボルト');
+      if (ad.unknownOn) armLines.push('不明' + (ad.reserveFee === 'yes' ? '（予備費あり）' : '（予備費なし）'));
       var armStr = armLines.length ? armLines.join('・') : '未設定';
       lines.push('　機器：' + camStr);
       lines.push('　アーム：' + armStr);
@@ -1871,10 +2086,10 @@ function buildGroupArmText(groups) {
   var totals = { wall: 0, pole: 0, ceil: 0, none: 0 };
   groups.forEach(function(g) {
     var ad = g.armData || {};
-    totals.wall += ad.wall || 0;
-    totals.pole += ad.pole || 0;
-    totals.ceil += ad.ceil || 0;
-    totals.none += ad.none || 0;
+    totals.wall += armKeyTotal(ad, 'wall');
+    totals.pole += armKeyTotal(ad, 'pole');
+    totals.ceil += armKeyTotal(ad, 'ceil');
+    totals.none += armKeyTotal(ad, 'none');
   });
   var lines = [];
   if (totals.wall > 0) lines.push('アーム　　：壁付けアーム × ' + totals.wall + '台');
