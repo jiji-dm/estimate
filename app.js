@@ -856,7 +856,8 @@ function showStep(n) {
 function buildLanQueryVisibility() {
   const el = document.getElementById('lanChangeQuery');
   if (!el) return;
-  const show = d.kojiType === '交換' || d.kojiType === '移設';
+  // 長さ入力をスキップする構成（カメラなし）では距離変更の確認も無意味なので非表示
+  const show = (d.kojiType === '交換' || d.kojiType === '移設') && hasCameraDevices();
   el.style.display = show ? 'block' : 'none';
   if (show) {
     el.querySelectorAll('.choice-btn').forEach(b=>b.classList.remove('selected'));
@@ -1001,8 +1002,18 @@ function lanSegLenChange(id, delta) {
 function isLanSegComplete(s) {
   if (!s.wiring) return false;
   if (s.wiring === '配管' && !s.pipeType) return false;
-  if (!s.length || s.length <= 0) return false;
+  // カメラ無し（サイネージ/Lidarのみ）構成では長さ入力をスキップするため、長さは判定対象外
+  if (hasCameraDevices()) {
+    if (!s.length || s.length <= 0) return false;
+  }
   return true;
+}
+
+// カメラ（IP/ステレオ）を含むグループが1つでもあるか
+function hasCameraDevices() {
+  return (powerGroups || []).some(function(g) {
+    return g.deviceType === 'camera' && ((g.camIP || 0) + (g.camStereo || 0) > 0);
+  });
 }
 
 // 全区間入力済みかつ次へボタンの有効化を制御
@@ -1018,6 +1029,9 @@ function updateLanTotal() {
   const total = (d.lanSegments || []).reduce((sum, s) => sum + (parseFloat(s.length) || 0), 0);
   const el = document.getElementById('lanTotalNum');
   if (el) el.textContent = total;
+  // カメラを含まない構成では長さを使わないので合計バー自体を隠す
+  const bar = document.getElementById('lanTotalBar');
+  if (bar) bar.style.display = hasCameraDevices() ? '' : 'none';
 }
 
 // LAN区間リストを描画する
@@ -1042,8 +1056,9 @@ function buildLanSegmentDOM(s, idx) {
   // ヘッダー
   const header = document.createElement('div');
   header.className = 'power-group-header';
+  const showLen = hasCameraDevices();
   const summary = complete
-    ? (s.wiring + (s.wiring === '配管' && s.pipeType ? '（' + s.pipeType + '）' : '') + ' ' + s.length + 'm')
+    ? (s.wiring + (s.wiring === '配管' && s.pipeType ? '（' + s.pipeType + '）' : '') + (showLen ? ' ' + s.length + 'm' : ''))
     : '未入力';
   header.innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;">' +
@@ -1103,26 +1118,28 @@ function buildLanSegmentDOM(s, idx) {
     body.appendChild(pGrid);
   }
 
-  // 長さ
-  const lLabel = document.createElement('div');
-  lLabel.className = 'arm-sub-label';
-  lLabel.style.cssText = 'margin:12px 0 8px;';
-  lLabel.textContent = '📏 長さ（m）';
-  body.appendChild(lLabel);
+  // 長さ（カメラ含む構成のときのみ入力UIを表示）
+  if (showLen) {
+    const lLabel = document.createElement('div');
+    lLabel.className = 'arm-sub-label';
+    lLabel.style.cssText = 'margin:12px 0 8px;';
+    lLabel.textContent = '📏 長さ（m）';
+    body.appendChild(lLabel);
 
-  const lRow = document.createElement('div');
-  lRow.className = 'inline-count-ctrl';
-  lRow.style.marginBottom = '4px';
-  lRow.innerHTML =
-    '<button class="cnt-btn" id="lanSegMinus_' + s.id + '">−</button>' +
-    '<div style="display:flex;align-items:baseline;gap:4px;">' +
-      '<div class="cnt-val" id="lanSegLen_' + s.id + '" style="font-size:24px;min-width:48px;">' + (s.length || 0) + '</div>' +
-      '<span style="font-size:13px;color:var(--text-dim);">m</span>' +
-    '</div>' +
-    '<button class="cnt-btn" id="lanSegPlus_' + s.id + '">＋</button>';
-  body.appendChild(lRow);
-  lRow.querySelector('#lanSegMinus_' + s.id).addEventListener('click', function() { lanSegLenChange(s.id, -5); });
-  lRow.querySelector('#lanSegPlus_' + s.id).addEventListener('click', function() { lanSegLenChange(s.id, 5); });
+    const lRow = document.createElement('div');
+    lRow.className = 'inline-count-ctrl';
+    lRow.style.marginBottom = '4px';
+    lRow.innerHTML =
+      '<button class="cnt-btn" id="lanSegMinus_' + s.id + '">−</button>' +
+      '<div style="display:flex;align-items:baseline;gap:4px;">' +
+        '<div class="cnt-val" id="lanSegLen_' + s.id + '" style="font-size:24px;min-width:48px;">' + (s.length || 0) + '</div>' +
+        '<span style="font-size:13px;color:var(--text-dim);">m</span>' +
+      '</div>' +
+      '<button class="cnt-btn" id="lanSegPlus_' + s.id + '">＋</button>';
+    body.appendChild(lRow);
+    lRow.querySelector('#lanSegMinus_' + s.id).addEventListener('click', function() { lanSegLenChange(s.id, -5); });
+    lRow.querySelector('#lanSegPlus_' + s.id).addEventListener('click', function() { lanSegLenChange(s.id, 5); });
+  }
 
   // 削除ボタン（区間が2件以上のときのみ表示）
   if (d.lanSegments.length > 1) {

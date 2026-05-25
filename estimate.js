@@ -134,32 +134,40 @@ function calcEstimate(r) {
   const lanSegs = getLanSegments(r);
   const lan = lanSegs.reduce(function(s, x) { return s + (parseFloat(x.length) || 0); }, 0);
 
-  // LANケーブル延長費（合計長さで判定）
-  if (lan > 50) {
-    const lanFee = Math.round((lan - 50) * 750);
-    lines.push({ label: `LANケーブル延長費（${lan - 50}m超過 × ¥750）`, val: lanFee });
-    total += lanFee;
-  }
-
-  // 区間ごとに配線方法別の料金を加算
-  lanSegs.forEach(function(seg, i) {
-    const len = parseFloat(seg.length) || 0;
-    if (len <= 0) return;
-    const tag = lanSegs.length > 1 ? `（区間${i + 1}）` : '';
-    if (seg.wiring === '露出') {
-      const exposedFee = Math.round(len * PIPE_RATES['露出']);
-      lines.push({ label: `LAN露出配線${tag}（${len}m × ${fmtYen(PIPE_RATES['露出'])}）`, val: exposedFee });
-      total += exposedFee;
-    } else if (seg.wiring === '配管' && seg.pipeType && seg.pipeType !== 'モール') {
-      const rate = PIPE_RATES[seg.pipeType] || 0;
-      if (rate > 0) {
-        const lanPipeFee = Math.round(len * rate);
-        lines.push({ label: `LAN配管 ${seg.pipeType}${tag}（${len}m × ${fmtYen(rate)}）`, val: lanPipeFee });
-        total += lanPipeFee;
-      }
-    }
-    // 天井内は配線費なし（既存仕様）。モール配管は下のモール集計で別計上。
+  // カメラ（IP/ステレオ）がある場合のみ長さベースの費用を計上
+  // サイネージ/Lidarのみの構成では長さ入力をスキップしているため、延長費・配線費は計算しない
+  const lanHasCamera = (r.powerGroups || []).some(function(g) {
+    return g.deviceType === 'camera' && ((g.camIP || 0) + (g.camStereo || 0) > 0);
   });
+
+  if (lanHasCamera) {
+    // LANケーブル延長費（合計長さで判定）
+    if (lan > 50) {
+      const lanFee = Math.round((lan - 50) * 750);
+      lines.push({ label: `LANケーブル延長費（${lan - 50}m超過 × ¥750）`, val: lanFee });
+      total += lanFee;
+    }
+
+    // 区間ごとに配線方法別の料金を加算
+    lanSegs.forEach(function(seg, i) {
+      const len = parseFloat(seg.length) || 0;
+      if (len <= 0) return;
+      const tag = lanSegs.length > 1 ? `（区間${i + 1}）` : '';
+      if (seg.wiring === '露出') {
+        const exposedFee = Math.round(len * PIPE_RATES['露出']);
+        lines.push({ label: `LAN露出配線${tag}（${len}m × ${fmtYen(PIPE_RATES['露出'])}）`, val: exposedFee });
+        total += exposedFee;
+      } else if (seg.wiring === '配管' && seg.pipeType && seg.pipeType !== 'モール') {
+        const rate = PIPE_RATES[seg.pipeType] || 0;
+        if (rate > 0) {
+          const lanPipeFee = Math.round(len * rate);
+          lines.push({ label: `LAN配管 ${seg.pipeType}${tag}（${len}m × ${fmtYen(rate)}）`, val: lanPipeFee });
+          total += lanPipeFee;
+        }
+      }
+      // 天井内は配線費なし（既存仕様）。モール配管は下のモール集計で別計上。
+    });
+  }
 
   // 電源工事費
   const powerGroups = r.powerGroups || [];
