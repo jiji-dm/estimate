@@ -290,14 +290,30 @@ function calcEstimate(r) {
     total += kosoFee;
   }
 
-  // 屋外設置費用
-  const days = parseInt((r.workPlan || {}).days) || 1;
-  if (r.location === '屋外') {
+  // 警備員費・道路使用許可申請費（Step11の選択に基づき加算）
+  // workPlan の days 合算（仮設は install/remove の合計、単独は single の値）
+  const wpAll = r.workPlan || {};
+  let days = 0;
+  if (r.kojiType === '仮設') {
+    days = (parseInt((wpAll.install || {}).days) || 0)
+         + (parseInt((wpAll.remove  || {}).days) || 0);
+  } else {
+    days = parseInt((wpAll.single || {}).days) || 0;
+  }
+  if (days < 1) days = 1;
+
+  // 警備員費：有・不明で加算
+  if (r.guardOption === 'yes' || r.guardOption === 'unknown') {
     const guardFee = 23000 * days;
-    lines.push({ label: `警備員費（${days}日 × ¥23,000）`, val: guardFee });
+    const noteTag = r.guardOption === 'unknown' ? '・要確認' : '';
+    lines.push({ label: `警備員費（${days}日 × ¥23,000${noteTag}）`, val: guardFee });
     total += guardFee;
-    // 道路使用許可は要確認のため注記のみ
-    lines.push({ label: `道路使用許可申請費（要確認）`, val: null, min: 0, max: 12000 });
+  }
+
+  // 道路使用許可申請費：有・不明で加算（金額幅）
+  if (r.roadPermit === 'yes' || r.roadPermit === 'unknown') {
+    const noteTag = r.roadPermit === 'unknown' ? '要確認' : '実費';
+    lines.push({ label: `道路使用許可申請費（${noteTag}）`, val: null, min: 0, max: 12000 });
     rangeMin += 0; rangeMax += 12000; hasRange = true;
   }
 

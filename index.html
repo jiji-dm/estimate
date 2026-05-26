@@ -302,6 +302,28 @@
           <div id="workSection_remove"></div>
         </div>
 
+        <!-- 警備員配置 -->
+        <div class="field-section" style="margin-top:18px;">
+          <div class="field-section-label">🛡️ 警備員の配置</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">判定基準補足：屋内/屋外共にお客様のご希望有無と設置場所の人通りの多さによる</div>
+          <div class="btn-grid col3" id="guardOptionGrid" style="margin-bottom:0;">
+            <button class="choice-btn" onclick="pick(this,'guardOption','no')"><span class="icon">🚫</span>無</button>
+            <button class="choice-btn" onclick="pick(this,'guardOption','yes')"><span class="icon">✅</span>有<small class="sub">料金追加</small></button>
+            <button class="choice-btn" onclick="pick(this,'guardOption','unknown')"><span class="icon">❓</span>不明<small class="sub">料金追加</small></button>
+          </div>
+        </div>
+
+        <!-- 道路申請許可 -->
+        <div class="field-section">
+          <div class="field-section-label">🚧 道路申請許可</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">判定基準補足：屋外で道路などに車を停めて作業する場合のみ</div>
+          <div class="btn-grid col3" id="roadPermitGrid" style="margin-bottom:0;">
+            <button class="choice-btn" onclick="pick(this,'roadPermit','no')"><span class="icon">🚫</span>無</button>
+            <button class="choice-btn" onclick="pick(this,'roadPermit','yes')"><span class="icon">✅</span>有<small class="sub">料金追加</small></button>
+            <button class="choice-btn" onclick="pick(this,'roadPermit','unknown')"><span class="icon">❓</span>不明<small class="sub">料金追加</small></button>
+          </div>
+        </div>
+
         <button class="next-btn" onclick="nextStep()">次へ →</button>
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>

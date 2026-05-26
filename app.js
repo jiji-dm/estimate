@@ -1865,13 +1865,29 @@ function buildWorkStep() {
   } else {
     buildWorkSection('single');
   }
+  // 警備員配置・道路申請許可：デフォルト「無」を選択状態にする
+  if (!d.guardOption) d.guardOption = 'no';
+  if (!d.roadPermit)  d.roadPermit  = 'no';
+  syncChoiceSelection('guardOptionGrid', 'guardOption', d.guardOption);
+  syncChoiceSelection('roadPermitGrid',  'roadPermit',  d.roadPermit);
+}
+
+// 指定グリッド内の choice-btn のうち、value に一致するものを selected 状態にする
+function syncChoiceSelection(gridId, key, val) {
+  const grid = document.getElementById(gridId);
+  if (!grid) return;
+  grid.querySelectorAll('.choice-btn').forEach(function(b) {
+    b.classList.remove('selected');
+    const oc = b.getAttribute('onclick') || '';
+    if (oc.includes(`'${key}','${val}'`)) b.classList.add('selected');
+  });
 }
 
 // 作業計画の1セクション（日数・休日・夜間等）を構築する
 function buildWorkSection(id) {
   const el = document.getElementById('workSection_'+id);
   if (!el) return;
-  if (!d.workPlan[id]) d.workPlan[id] = { workers:2, days:1, hours:3 };
+  if (!d.workPlan[id]) d.workPlan[id] = { workers:2, days:1, hours:8 };
   const p = d.workPlan[id];
   el.innerHTML = `
   <div class="work-plan-section">
@@ -1896,9 +1912,9 @@ function buildWorkSection(id) {
     <div class="work-plan-row">
       <div class="work-plan-item-label">⏱ 予想時間</div>
       <div class="work-plan-ctrl">
-        <button class="cnt-btn" onclick="workPlanChange('${id}','hours',-0.5)">−</button>
+        <button class="cnt-btn" onclick="workPlanChange('${id}','hours',-1)">−</button>
         <div class="work-plan-val" id="wp_${id}_hours">${p.hours}</div>
-        <button class="cnt-btn" onclick="workPlanChange('${id}','hours',0.5)">＋</button>
+        <button class="cnt-btn" onclick="workPlanChange('${id}','hours',1)">＋</button>
         <div class="work-plan-unit">時間</div>
       </div>
     </div>
@@ -1912,8 +1928,8 @@ function buildWorkSection(id) {
 // 作業計画の数値項目を増減する
 function workPlanChange(id, key, delta) {
   if (!d.workPlan) d.workPlan = {};
-  if (!d.workPlan[id]) d.workPlan[id] = { workers:2, days:1, hours:3 };
-  const min = key==='hours' ? 0.5 : 1;
+  if (!d.workPlan[id]) d.workPlan[id] = { workers:2, days:1, hours:8 };
+  const min = 1;
   d.workPlan[id][key] = Math.max(min, (d.workPlan[id][key]||min) + delta);
   const el = document.getElementById(`wp_${id}_${key}`);
   if (el) el.textContent = d.workPlan[id][key];
@@ -2117,8 +2133,18 @@ function buildWorkDateText(r) {
   return `${label}　　：${r.workDate}`;
 }
 
+// guardOption / roadPermit のコード値を表示用ラベルに変換する
+function guardOptionLabel(v) {
+  return v === 'yes' ? '有' : v === 'unknown' ? '不明' : '無';
+}
+function roadPermitLabel(v) {
+  return v === 'yes' ? '有' : v === 'unknown' ? '不明' : '無';
+}
+
 // 作業計画（日数・休日・夜間等）をレポート用テキストに変換する
 function buildWorkPlanText(r) {
+  const guardLine = `警備員配置　：${guardOptionLabel(r.guardOption)}`;
+  const roadLine  = `道路申請許可：${roadPermitLabel(r.roadPermit)}`;
   if (r.kojiType === '仮設') {
     const i = r.workPlan.install || {};
     const rv = r.workPlan.remove  || {};
@@ -2131,14 +2157,19 @@ ${r.kosoLine}
 【作業計画 — 撤去】
 作業人数　：${rv.workers||'-'}名
 かかる日数　：${rv.days||'-'}日
-予想時間　：${rv.hours||'-'}時間`;
+予想時間　：${rv.hours||'-'}時間
+
+${guardLine}
+${roadLine}`;
   }
   const p = r.workPlan.single || {};
   return `【作業計画】
 作業人数　：${p.workers||'-'}名
 かかる日数　：${p.days||'-'}日
 予想時間　：${p.hours||'-'}時間
-${r.kosoLine}`;
+${r.kosoLine}
+${guardLine}
+${roadLine}`;
 }
 
 // currentReport オブジェクト全体をレポートテキストに変換する
@@ -2245,6 +2276,8 @@ function generateReport() {
     kosoEquip:    JSON.parse(JSON.stringify(d.kosoEquip||[])),
     kosoSupply:   d.kosoSupply || '',
     workPlan:     JSON.parse(JSON.stringify(d.workPlan||{})),
+    guardOption:  d.guardOption || 'no',
+    roadPermit:   d.roadPermit  || 'no',
   };
 
   showReport(currentReport);
