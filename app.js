@@ -1228,10 +1228,7 @@ function validateGroupsForStep8() {
     }
     if (g.deviceType === 'camera') {
       var c = (g.camIP||0) + (g.camStereo||0);
-      var armT = (g.armData||{}).wall||0;
-      armT += (g.armData||{}).pole||0;
-      armT += (g.armData||{}).ceil||0;
-      armT += (g.armData||{}).none||0;
+      var armT = armTotalForGroup(g);
       cam += c;
       if (c === 0) issues.push(label + '：カメラ台数を入力してください');
       else if (c > g.count * 3) issues.push(label + '：カメラ台数がシステム上限('+(g.count*3)+'台)を超えています');
