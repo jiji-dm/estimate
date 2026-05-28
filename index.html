@@ -7,8 +7,99 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDtKIT6SPD8z5kGSLjV3uBF9l19BD65mo8&libraries=places&callback=initAutocomplete" async defer></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  /* 認証ゲート */
+  #authGate {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: var(--bg, #0a0a0f);
+    display: flex; /* JSで切り替え */
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    font-family: 'Noto Sans JP', sans-serif;
+  }
+  #authGate .auth-card {
+    text-align: center;
+    max-width: 380px;
+    width: 100%;
+  }
+  #authGate .auth-icon {
+    font-size: 56px;
+    margin-bottom: 16px;
+  }
+  #authGate .auth-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    color: #e2e2ee;
+    margin: 0 0 4px;
+    letter-spacing: 0.02em;
+  }
+  #authGate .auth-sub {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    color: #666680;
+    letter-spacing: 0.18em;
+    margin-bottom: 28px;
+  }
+  #authGate .auth-desc {
+    color: #999;
+    font-size: 13px;
+    line-height: 1.7;
+    margin-bottom: 32px;
+  }
+  #authGate #gsi-button {
+    display: flex;
+    justify-content: center;
+    min-height: 44px;
+  }
+  #authGate #authLoading {
+    display: none;
+    color: #999;
+    font-size: 12px;
+    margin-top: 18px;
+  }
+  #authGate #authError {
+    display: none;
+    color: #ff7a7a;
+    font-size: 13px;
+    line-height: 1.6;
+    margin-top: 18px;
+    padding: 10px 14px;
+    background: rgba(255, 122, 122, 0.08);
+    border-radius: 8px;
+  }
+  #authGate .auth-footnote {
+    margin-top: 24px;
+    font-size: 11px;
+    color: #444;
+    letter-spacing: 0.05em;
+  }
+</style>
 </head>
 <body>
+
+<!-- ══ 認証ゲート（初期表示: 認証チェック前は必ず見える） ══ -->
+<div id="authGate">
+  <div class="auth-card">
+    <div class="auth-icon">🔍</div>
+    <h1 class="auth-title">現調レポート</h1>
+    <div class="auth-sub">SITE SURVEY REPORT</div>
+    <p class="auth-desc">
+      社内専用ツールです。<br>
+      会社の Google アカウントでログインしてください。
+    </p>
+    <div id="gsi-button"></div>
+    <div id="authLoading">確認中...</div>
+    <div id="authError"></div>
+    <div class="auth-footnote">@vacancorp.com のみアクセス可</div>
+  </div>
+</div>
+
 <div class="app">
 
   <div class="header">
@@ -484,6 +575,7 @@
 <div class="toast" id="toast"></div>
 
 
+<script src="auth.js"></script>
 <script src="app.js"></script>
 <script src="estimate.js"></script>
 </body>
