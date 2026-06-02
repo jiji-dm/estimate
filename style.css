@@ -606,6 +606,15 @@ small.sub { color: var(--text-muted); font-size: 10px; display: block; margin-to
   font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700;
   color: #fff; min-width: 28px; text-align: center;
 }
+/* 直接入力できる数値欄（長さ・距離） */
+input.cnt-input {
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: 8px; padding: 4px 2px; outline: none;
+  -moz-appearance: textfield;
+}
+input.cnt-input:focus { border-color: var(--accent); }
+input.cnt-input::-webkit-outer-spin-button,
+input.cnt-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 /* ══ アーム種類選択 ══ */
 .arm-section { margin-bottom: 22px; }

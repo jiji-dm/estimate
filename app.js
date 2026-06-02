@@ -390,9 +390,11 @@ function buildPowerGroupDOM(g, idx, sysTotal) {
     body.appendChild(distGrid);
     if (g.distMode === 'custom') {
       var dr = document.createElement('div'); dr.className='power-dist-row';
-      dr.innerHTML='<span style="font-size:12px;color:var(--text-dim);">距離</span><div class="camera-count-ctrl"><button class="cnt-btn" id="pgdv_m_'+g.id+'"'+(g.distVal<=1?' disabled':'')+'>−</button><div class="cnt-val" style="font-size:18px;">'+g.distVal+'</div><button class="cnt-btn" id="pgdv_p_'+g.id+'">＋</button><span style="font-size:11px;color:var(--text-dim);">m</span></div>';
+      dr.innerHTML='<span style="font-size:12px;color:var(--text-dim);">距離</span><div class="camera-count-ctrl"><button class="cnt-btn" id="pgdv_m_'+g.id+'"'+(g.distVal<=1?' disabled':'')+'>−</button><input type="number" inputmode="decimal" min="1" class="cnt-val cnt-input" id="pgdv_v_'+g.id+'" style="font-size:18px;width:56px;text-align:center;" value="'+g.distVal+'"><button class="cnt-btn" id="pgdv_p_'+g.id+'">＋</button><span style="font-size:11px;color:var(--text-dim);">m</span></div>';
       dr.querySelector('#pgdv_m_'+g.id).addEventListener('click', function(){ pgChange(g.id,'distVal',-1); });
       dr.querySelector('#pgdv_p_'+g.id).addEventListener('click', function(){ pgChange(g.id,'distVal',1); });
+      dr.querySelector('#pgdv_v_'+g.id).addEventListener('input', function(){ pgSetNum(g.id,'distVal',this.value); });
+      dr.querySelector('#pgdv_v_'+g.id).addEventListener('blur', function(){ renderPowerGroups(); });
       body.appendChild(dr);
     }
   }
@@ -429,9 +431,11 @@ function buildPowerGroupDOM(g, idx, sysTotal) {
       body.appendChild(ndGrid);
       if (g.newDistMode === 'custom') {
         var ndr = document.createElement('div'); ndr.className='power-dist-row';
-        ndr.innerHTML='<span style="font-size:12px;color:var(--text-dim);">距離</span><div class="camera-count-ctrl"><button class="cnt-btn" id="pgndv_m_'+g.id+'"'+(g.newDistVal<=10?' disabled':'')+'>−</button><div class="cnt-val" style="font-size:18px;">'+g.newDistVal+'</div><button class="cnt-btn" id="pgndv_p_'+g.id+'">＋</button><span style="font-size:11px;color:var(--text-dim);">m</span></div>';
+        ndr.innerHTML='<span style="font-size:12px;color:var(--text-dim);">距離</span><div class="camera-count-ctrl"><button class="cnt-btn" id="pgndv_m_'+g.id+'"'+(g.newDistVal<=10?' disabled':'')+'>−</button><input type="number" inputmode="decimal" min="10" class="cnt-val cnt-input" id="pgndv_v_'+g.id+'" style="font-size:18px;width:56px;text-align:center;" value="'+g.newDistVal+'"><button class="cnt-btn" id="pgndv_p_'+g.id+'">＋</button><span style="font-size:11px;color:var(--text-dim);">m</span></div>';
         ndr.querySelector('#pgndv_m_'+g.id).addEventListener('click', function(){ pgChange(g.id,'newDistVal',-10); });
         ndr.querySelector('#pgndv_p_'+g.id).addEventListener('click', function(){ pgChange(g.id,'newDistVal',10); });
+        ndr.querySelector('#pgndv_v_'+g.id).addEventListener('input', function(){ pgSetNum(g.id,'newDistVal',this.value); });
+        ndr.querySelector('#pgndv_v_'+g.id).addEventListener('blur', function(){ renderPowerGroups(); });
         body.appendChild(ndr);
       }
     }
@@ -519,6 +523,14 @@ function pgChange(id, key, delta) {
   }
   if (document.getElementById('groupCamArmList')) renderGroupCamArmList();
   if (document.getElementById('powerGroupList')) renderPowerGroups();
+}
+// グループの数値項目を直接入力でセットする（distVal, newDistVal）
+function pgSetNum(id, key, val) {
+  const g = powerGroups.find(x => x.id===id); if(!g) return;
+  const min = key==='newDistVal' ? 10 : 1;
+  var n = parseFloat(val);
+  if (isNaN(n) || n < min) n = min;
+  g[key] = n;
 }
 // グループの開閉状態を切り替える
 function pgToggle(id) {
@@ -1045,7 +1057,18 @@ function lanSegLenChange(id, delta) {
   if (!s) return;
   s.length = Math.max(0, (s.length || 0) + delta);
   const el = document.getElementById('lanSegLen_' + id);
-  if (el) el.textContent = s.length;
+  if (el) el.value = s.length;
+  updateLanTotal();
+  updateLanNextBtn();
+}
+
+// LAN区間の長さを直接入力でセットする
+function lanSegLenSet(id, val) {
+  const s = d.lanSegments.find(x => x.id === id);
+  if (!s) return;
+  var n = parseFloat(val);
+  if (isNaN(n) || n < 0) n = 0;
+  s.length = n;
   updateLanTotal();
   updateLanNextBtn();
 }
@@ -1184,13 +1207,14 @@ function buildLanSegmentDOM(s, idx) {
     lRow.innerHTML =
       '<button class="cnt-btn" id="lanSegMinus_' + s.id + '">−</button>' +
       '<div style="display:flex;align-items:baseline;gap:4px;">' +
-        '<div class="cnt-val" id="lanSegLen_' + s.id + '" style="font-size:24px;min-width:48px;">' + (s.length || 0) + '</div>' +
+        '<input type="number" inputmode="decimal" min="0" class="cnt-val cnt-input" id="lanSegLen_' + s.id + '" style="font-size:24px;width:64px;text-align:center;" value="' + (s.length || 0) + '">' +
         '<span style="font-size:13px;color:var(--text-dim);">m</span>' +
       '</div>' +
       '<button class="cnt-btn" id="lanSegPlus_' + s.id + '">＋</button>';
     body.appendChild(lRow);
     lRow.querySelector('#lanSegMinus_' + s.id).addEventListener('click', function() { lanSegLenChange(s.id, -5); });
     lRow.querySelector('#lanSegPlus_' + s.id).addEventListener('click', function() { lanSegLenChange(s.id, 5); });
+    lRow.querySelector('#lanSegLen_' + s.id).addEventListener('input', function() { lanSegLenSet(s.id, this.value); });
   }
 
   // 削除ボタン（区間が2件以上のときのみ表示）
