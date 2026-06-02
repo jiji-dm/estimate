@@ -2553,6 +2553,7 @@ function renderList() {
         </div>
         <div class="card-actions">
           <button class="card-act-btn" onclick="event.stopPropagation();downloadFromList(${r.id})">⬇️ 書出</button>
+          <button class="card-act-btn" onclick="event.stopPropagation();downloadEstimateFromList(${r.id})">💰 見積</button>
           <button class="card-act-btn" onclick="event.stopPropagation();toggleCardEdit(${r.id})">✏️ 編集</button>
           <button class="card-act-btn del" onclick="event.stopPropagation();confirmDeleteOne(${r.id},'${(title).replace(/'/g,'')}')">🗑️ 削除</button>
         </div>
@@ -2693,11 +2694,14 @@ function openModal(id) {
 function renderModalEstimate(r) {
   const el = document.getElementById('modalEstimate');
   if (!el) return;
+  const estBtn = document.getElementById('modalEstimateBtn');
   const est = calcEstimate(r);
   if (est.camTotal === 0 && (r.powerGroups || []).length === 0) {
     el.style.display = 'none';
+    if (estBtn) estBtn.style.display = 'none';
     return;
   }
+  if (estBtn) estBtn.style.display = '';
   const rows = est.lines.map(function(l) {
     const valStr = l.val !== null && l.val !== undefined
       ? fmtYen(l.val)

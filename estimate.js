@@ -514,11 +514,10 @@ function buildEstimateText(r) {
   return lines.join('\n');
 }
 
-// 見積テキストを .txt ファイルでダウンロードする
-function downloadEstimate() {
-  if (!currentReport) return;
-  const text = buildEstimateText(currentReport);
-  const r = currentReport;
+// 指定レポートの見積テキストを .txt ファイルでダウンロードする
+function downloadEstimateFor(r) {
+  if (!r) return;
+  const text = buildEstimateText(r);
   const sn = (r.siteName || '現場').replace(/[\\\/:\*\?"<>\|]/g,'_');
   let dateStr = 'nodate';
   if (r.createdAt) {
@@ -527,4 +526,19 @@ function downloadEstimate() {
   }
   dl(text, dateStr + '_' + sn + '_見積.txt');
   showToast('見積ファイルを書き出しました！', 'green');
+}
+
+// 入力中レポートの見積を .txt ファイルでダウンロードする
+function downloadEstimate() {
+  downloadEstimateFor(currentReport);
+}
+
+// 保存済みリストから指定IDの見積を .txt ファイルでダウンロードする
+function downloadEstimateFromList(id) {
+  downloadEstimateFor(getSaved().find(x => x.id === id));
+}
+
+// モーダル表示中レポートの見積を .txt ファイルでダウンロードする
+function downloadModalEstimate() {
+  downloadEstimateFor(modalReport);
 }
