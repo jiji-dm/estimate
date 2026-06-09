@@ -81,6 +81,26 @@ const ARM_METHODS = {
 };
 const ARM_LABELS = { wall: '🔩 壁付け', pole: '🏗️ ポール', ceil: '⬆️ 天井', none: '🚫 なし' };
 
+// Lidar専用アーム種別（カメラとは別系統。台数管理し、Lidar台数と一致が必要）
+const LIDAR_ARM_METHODS = [
+  { key: '仮設ポール', price: 2500 },
+  { key: 'Lアングル',  price: 5000 },
+  { key: 'ボックス',   price: 10000 },
+];
+// 1システムあたりのLidar設置可能台数
+const LIDAR_PER_SYS = 8;
+
+// グループのLidar台数を返す（旧データはシステム台数にフォールバック）
+function lidarCountForGroup(g) {
+  if (!g) return 0;
+  return (g.lidarCount != null) ? (Number(g.lidarCount) || 0) : (g.count || 0);
+}
+// グループのLidarアーム合計台数を返す
+function lidarArmTotal(g) {
+  if (!g || !g.lidarArm || typeof g.lidarArm !== 'object') return 0;
+  return Object.values(g.lidarArm).reduce(function(s, n) { return s + (Number(n) || 0); }, 0);
+}
+
 // 指定アーム種別の合計台数を返す。none は数値、それ以外は { method: count } の合計。
 function armKeyTotal(armData, key) {
   if (!armData || armData[key] == null) return 0;
@@ -502,6 +522,12 @@ function pgSetDeviceType(id, type) {
     g.camStereo = 0;
     g.armData = {};
   }
+  if (type === 'lidar') {
+    if (g.lidarCount == null) g.lidarCount = g.count || 1;
+    if (!g.lidarArm || typeof g.lidarArm !== 'object') g.lidarArm = {};
+  } else {
+    g.lidarArm = {};
+  }
   renderGroupCamArmList();
 }
 // グループの数値項目を増減する（count, distVal, newDistVal）
@@ -518,6 +544,11 @@ function pgChange(id, key, delta) {
         else if ((g.camIP || 0) > 0) g.camIP--;
         else break;
       }
+    } else if (g.deviceType === 'lidar') {
+      // Lidar台数を新しい上限（sys×8）に丸め、アーム合計も追従させる
+      var maxLidar = g.count * LIDAR_PER_SYS;
+      if (lidarCountForGroup(g) > maxLidar) g.lidarCount = maxLidar;
+      clampLidarArm(g);
     }
     syncSystemTotal();
   }
@@ -909,8 +940,8 @@ function showStep(n) {
 function buildLanQueryVisibility() {
   const el = document.getElementById('lanChangeQuery');
   if (!el) return;
-  // 長さ入力をスキップする構成（カメラなし）では距離変更の確認も無意味なので非表示
-  const show = (d.kojiType === '交換' || d.kojiType === '移設') && hasCameraDevices();
+  // LAN配線が無い構成（サイネージのみ）では距離変更の確認も無意味なので非表示
+  const show = (d.kojiType === '交換' || d.kojiType === '移設') && hasLanDevices();
   el.style.display = show ? 'block' : 'none';
   if (show) {
     el.querySelectorAll('.choice-btn').forEach(b=>b.classList.remove('selected'));
@@ -961,6 +992,8 @@ function isStepSkipped(n) {
   if (SKIP_STEPS.has(n)) return true;
   // Step8（アーム手配）：すべて「なし」ならスキップ
   if (n === 8 && isAllNoArm()) return true;
+  // Step9（LAN配線）：LANが必要なグループが無い（サイネージのみ等）ならスキップ
+  if (n === 9 && !hasLanDevices()) return true;
   // Step13（廃材処理）：設置工事ならスキップ
   if (n === 13 && d.kojiType === '設置') return true;
   return false;
@@ -1004,151 +1037,204 @@ const LAN_WIRING_OPTS = ['露出','配管','天井内'];
 // 配管種別の選択肢
 const LAN_PIPE_OPTS = ['VE管(塩ビ)','P薄鋼電線管','Pドブ付(溶融亜鉛めっき)','モール'];
 
-// Step10表示時の初期化（区間が空なら1件追加し、変更確認UIも復元）
-function initLanStep() {
-  if (!Array.isArray(d.lanSegments)) d.lanSegments = [];
-  if (d.lanSegments.length === 0) addLanSegment(true);
-  buildLanQueryVisibility();
-  renderLanSegments();
+// 配管種別アイコン・ラベル定義
+const LAN_PIPE_ICONS = { 'VE管(塩ビ)':'🟡', 'P薄鋼電線管':'🔩', 'Pドブ付(溶融亜鉛めっき)':'⚙️', 'モール':'📏' };
+const LAN_PIPE_LABELS = { 'VE管(塩ビ)':'VE管(塩ビ)', 'P薄鋼電線管':'P薄鋼電線管', 'Pドブ付(溶融亜鉛めっき)':'Pドブ付', 'モール':'モール' };
+
+// グループのLAN配線初期長さ（カメラ＝カメラ台数×10／Lidar＝台数×10／サイネージ＝0）
+function lanGroupDefaultLen(g) {
+  if (g.deviceType === 'lidar')  return (g.count || 0) * 10;
+  if (g.deviceType === 'camera') return ((g.camIP || 0) + (g.camStereo || 0)) * 10;
+  return 0; // サイネージはLAN不要
 }
 
-// LAN区間を1件追加する（silent=trueなら再描画スキップ）
-function addLanSegment(silent) {
-  if (!Array.isArray(d.lanSegments)) d.lanSegments = [];
-  d.lanSegments.push({
-    id: ++lanSegId,
-    wiring: null,
-    pipeType: null,
-    length: 10,
-  });
-  if (!silent) renderLanSegments();
+// グループがLAN配線入力を必要とするか（サイネージ／機器0台は不要）
+function groupNeedsLan(g) {
+  if (!g) return false;
+  if (g.deviceType === 'signage') return false;
+  if (g.deviceType === 'camera')  return ((g.camIP || 0) + (g.camStereo || 0)) > 0;
+  return true; // lidar
 }
 
-// LAN区間を削除する（最後の1件は削除不可）
-function removeLanSegment(id) {
-  if (d.lanSegments.length <= 1) {
-    showToast('区間は最低1件必要です', 'red');
-    return;
+// LAN配線が必要なグループが1つでもあるか（サイネージのみ施工ならfalse）
+function hasLanDevices() {
+  return (powerGroups || []).some(groupNeedsLan);
+}
+
+// グループにLAN情報オブジェクトを用意する（無ければ初期長さ付きで作成。
+// 未編集（lenTouched=false）なら台数変動に追従して初期長さを再計算）
+function ensureGroupLan(g) {
+  if (!g.lan) {
+    g.lan = { wiring: null, pipeType: null, length: lanGroupDefaultLen(g), lenTouched: false };
+  } else if (!g.lan.lenTouched) {
+    g.lan.length = lanGroupDefaultLen(g);
   }
-  d.lanSegments = d.lanSegments.filter(s => s.id !== id);
-  renderLanSegments();
+  return g.lan;
 }
 
-// LAN区間の配線方法をセット
-function setLanWiring(id, val) {
-  const s = d.lanSegments.find(x => x.id === id);
-  if (!s) return;
-  s.wiring = val;
-  if (val !== '配管') s.pipeType = null;
-  renderLanSegments();
+// Step9表示時の初期化（グループごとにLAN情報を用意し、変更確認UIも復元）
+function initLanStep() {
+  (powerGroups || []).forEach(function(g) {
+    if (groupNeedsLan(g)) ensureGroupLan(g);
+  });
+  buildLanQueryVisibility();
+  renderLanGroups();
 }
 
-// LAN区間の配管種別をセット
-function setLanPipeType(id, val) {
-  const s = d.lanSegments.find(x => x.id === id);
-  if (!s) return;
-  s.pipeType = val;
-  renderLanSegments();
+// IDからグループを取得
+function lanGroupById(gid) {
+  return (powerGroups || []).find(function(g) { return g.id === gid; });
 }
 
-// LAN区間の長さを増減する
-function lanSegLenChange(id, delta) {
-  const s = d.lanSegments.find(x => x.id === id);
-  if (!s) return;
-  s.length = Math.max(0, (s.length || 0) + delta);
-  const el = document.getElementById('lanSegLen_' + id);
-  if (el) el.value = s.length;
+// グループLANの配線方法をセット
+function setLanWiring(gid, val) {
+  const g = lanGroupById(gid);
+  if (!g) return;
+  ensureGroupLan(g);
+  g.lan.wiring = val;
+  if (val !== '配管') g.lan.pipeType = null;
+  renderLanGroups();
+}
+
+// グループLANの配管種別をセット
+function setLanPipeType(gid, val) {
+  const g = lanGroupById(gid);
+  if (!g) return;
+  ensureGroupLan(g);
+  g.lan.pipeType = val;
+  renderLanGroups();
+}
+
+// グループLANの長さを増減する
+function lanGroupLenChange(gid, delta) {
+  const g = lanGroupById(gid);
+  if (!g) return;
+  ensureGroupLan(g);
+  g.lan.length = Math.max(0, (g.lan.length || 0) + delta);
+  g.lan.lenTouched = true;
+  const el = document.getElementById('lanGroupLen_' + gid);
+  if (el) el.value = g.lan.length;
   updateLanTotal();
   updateLanNextBtn();
 }
 
-// LAN区間の長さを直接入力でセットする
-function lanSegLenSet(id, val) {
-  const s = d.lanSegments.find(x => x.id === id);
-  if (!s) return;
+// グループLANの長さを直接入力でセットする
+function lanGroupLenSet(gid, val) {
+  const g = lanGroupById(gid);
+  if (!g) return;
+  ensureGroupLan(g);
   var n = parseFloat(val);
   if (isNaN(n) || n < 0) n = 0;
-  s.length = n;
+  g.lan.length = n;
+  g.lan.lenTouched = true;
   updateLanTotal();
   updateLanNextBtn();
 }
 
-// LAN区間入力の完了判定
-function isLanSegComplete(s) {
-  if (!s.wiring) return false;
-  if (s.wiring === '配管' && !s.pipeType) return false;
-  // カメラ無し（サイネージ/Lidarのみ）構成では長さ入力をスキップするため、長さは判定対象外
-  if (hasCameraDevices()) {
-    if (!s.length || s.length <= 0) return false;
-  }
+// グループLAN入力の完了判定（LAN不要グループは常に完了扱い）
+function isLanGroupComplete(g) {
+  if (!groupNeedsLan(g)) return true;
+  if (!g.lan || !g.lan.wiring) return false;
+  if (g.lan.wiring === '配管' && !g.lan.pipeType) return false;
   return true;
 }
 
-// カメラ（IP/ステレオ）を含むグループが1つでもあるか
-function hasCameraDevices() {
-  return (powerGroups || []).some(function(g) {
-    return g.deviceType === 'camera' && ((g.camIP || 0) + (g.camStereo || 0) > 0);
-  });
-}
-
-// 全区間入力済みかつ次へボタンの有効化を制御
+// 全グループ入力済みかどうかで次へボタンの有効化を制御
 function updateLanNextBtn() {
   const nb = document.getElementById('next9');
   if (!nb) return;
-  const allOk = d.lanSegments.length > 0 && d.lanSegments.every(isLanSegComplete);
+  const allOk = (powerGroups || []).length > 0 && powerGroups.every(isLanGroupComplete);
   nb.disabled = !allOk;
 }
 
 // LAN合計長さを再計算してバーに反映
 function updateLanTotal() {
-  const total = (d.lanSegments || []).reduce((sum, s) => sum + (parseFloat(s.length) || 0), 0);
+  const total = (powerGroups || []).filter(groupNeedsLan)
+    .reduce((sum, g) => sum + (g.lan ? (parseFloat(g.lan.length) || 0) : 0), 0);
   const el = document.getElementById('lanTotalNum');
   if (el) el.textContent = total;
-  // カメラを含まない構成では長さを使わないので合計バー自体を隠す
   const bar = document.getElementById('lanTotalBar');
-  if (bar) bar.style.display = hasCameraDevices() ? '' : 'none';
+  if (bar) bar.style.display = hasLanDevices() ? '' : 'none';
 }
 
-// LAN区間リストを描画する
-function renderLanSegments() {
+// グループ別LANリストを描画する
+function renderLanGroups() {
   const list = document.getElementById('lanSegmentList');
   if (!list) return;
   list.innerHTML = '';
-  d.lanSegments.forEach(function(s, idx) {
-    list.appendChild(buildLanSegmentDOM(s, idx));
+  (powerGroups || []).forEach(function(g, idx) {
+    list.appendChild(buildLanGroupDOM(g, idx));
   });
   updateLanTotal();
   updateLanNextBtn();
 }
 
-// LAN区間1件分のDOMノードを生成
-function buildLanSegmentDOM(s, idx) {
-  const complete = isLanSegComplete(s);
+// グループ別の機器サマリー文字列を返す
+function lanGroupDeviceLabel(g) {
+  if (g.deviceType === 'signage') return 'サイネージ×' + (g.count || 0) + '台';
+  if (g.deviceType === 'lidar')   return 'Lidar×' + (g.count || 0) + '台';
+  const parts = [];
+  if (g.camIP    > 0) parts.push('IPカメラ×' + g.camIP + '台');
+  if (g.camStereo > 0) parts.push('ステレオ×' + g.camStereo + '台');
+  return parts.length ? parts.join('・') : 'カメラ未設定';
+}
+
+// グループ1件分のLAN入力DOMノードを生成
+function buildLanGroupDOM(g, idx) {
+  const needsLan = groupNeedsLan(g);
+  const complete = isLanGroupComplete(g);
+  const lan = g.lan || {};
   const wrap = document.createElement('div');
-  wrap.className = 'power-group-card' + (complete ? ' complete' : '');
+  wrap.className = 'power-group-card' + (needsLan && complete ? ' complete' : '');
   wrap.style.marginBottom = '10px';
+
+  const displayTitle = (g.groupName && g.groupName.trim()) ? g.groupName.trim() : 'グループ ' + (idx + 1);
+  const deviceLabel = lanGroupDeviceLabel(g);
 
   // ヘッダー
   const header = document.createElement('div');
   header.className = 'power-group-header';
-  const showLen = hasCameraDevices();
-  const summary = complete
-    ? (s.wiring + (s.wiring === '配管' && s.pipeType ? '（' + s.pipeType + '）' : '') + (showLen ? ' ' + s.length + 'm' : ''))
-    : '未入力';
+  let summary;
+  if (!needsLan) {
+    summary = '🖥️ LAN配線の入力は不要';
+  } else if (complete) {
+    summary = lan.wiring + (lan.wiring === '配管' && lan.pipeType ? '（' + lan.pipeType + '）' : '') + ' ' + (lan.length || 0) + 'm';
+  } else {
+    summary = '未入力（' + deviceLabel + '）';
+  }
   header.innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;">' +
       '<div class="power-group-num">' + (idx + 1) + '</div>' +
-      '<div><div class="power-group-title">区間 ' + (idx + 1) + '</div>' +
+      '<div><div class="power-group-title">' + displayTitle + '</div>' +
       '<div class="power-group-summary">' + summary + '</div></div>' +
     '</div>' +
     '<div style="display:flex;align-items:center;gap:8px;">' +
-      '<div class="power-group-check">' + (complete ? '✓' : '') + '</div>' +
+      '<div class="power-group-check">' + (needsLan && complete ? '✓' : '') + '</div>' +
     '</div>';
   wrap.appendChild(header);
 
   // 本体
   const body = document.createElement('div');
   body.className = 'power-group-body';
+
+  // サイネージ等LAN不要グループ：入力不可メッセージのみ
+  if (!needsLan) {
+    const msg = document.createElement('div');
+    msg.style.cssText = 'font-size:12px;color:var(--text-dim);padding:6px 2px;line-height:1.6;';
+    const reason = g.deviceType === 'signage'
+      ? 'サイネージはLANケーブル配線の入力は不要です。'
+      : 'カメラが未設定のためLAN配線の入力はありません。';
+    msg.innerHTML = '🖥️ <strong>' + deviceLabel + '</strong><br>' + reason;
+    body.appendChild(msg);
+    wrap.appendChild(body);
+    return wrap;
+  }
+
+  // 機器サマリー
+  const devLabel = document.createElement('div');
+  devLabel.style.cssText = 'font-size:12px;color:var(--text-dim);margin:2px 0 8px;';
+  devLabel.textContent = '📦 ' + deviceLabel;
+  body.appendChild(devLabel);
 
   // 配線方法
   const wLabel = document.createElement('div');
@@ -1162,16 +1248,16 @@ function buildLanSegmentDOM(s, idx) {
   wGrid.style.marginBottom = '4px';
   LAN_WIRING_OPTS.forEach(function(opt) {
     const btn = document.createElement('button');
-    btn.className = 'choice-btn' + (s.wiring === opt ? ' selected' : '');
+    btn.className = 'choice-btn' + (lan.wiring === opt ? ' selected' : '');
     const icon = opt === '露出' ? '〰️' : (opt === '配管' ? '🔲' : '🏗️');
     btn.innerHTML = '<span class="icon">' + icon + '</span>' + opt;
-    btn.addEventListener('click', function() { setLanWiring(s.id, opt); });
+    btn.addEventListener('click', function() { setLanWiring(g.id, opt); });
     wGrid.appendChild(btn);
   });
   body.appendChild(wGrid);
 
   // 配管種別（配管選択時のみ）
-  if (s.wiring === '配管') {
+  if (lan.wiring === '配管') {
     const pLabel = document.createElement('div');
     pLabel.className = 'arm-sub-label';
     pLabel.style.cssText = 'margin:12px 0 8px;';
@@ -1181,51 +1267,37 @@ function buildLanSegmentDOM(s, idx) {
     const pGrid = document.createElement('div');
     pGrid.className = 'btn-grid col2';
     pGrid.style.marginBottom = '4px';
-    const PIPE_ICONS = { 'VE管(塩ビ)':'🟡', 'P薄鋼電線管':'🔩', 'Pドブ付(溶融亜鉛めっき)':'⚙️', 'モール':'📏' };
-    const PIPE_LABELS = { 'VE管(塩ビ)':'VE管(塩ビ)', 'P薄鋼電線管':'P薄鋼電線管', 'Pドブ付(溶融亜鉛めっき)':'Pドブ付', 'モール':'モール' };
     LAN_PIPE_OPTS.forEach(function(opt) {
       const btn = document.createElement('button');
-      btn.className = 'choice-btn' + (s.pipeType === opt ? ' selected' : '');
-      btn.innerHTML = '<span class="icon">' + (PIPE_ICONS[opt] || '') + '</span>' + (PIPE_LABELS[opt] || opt);
-      btn.addEventListener('click', function() { setLanPipeType(s.id, opt); });
+      btn.className = 'choice-btn' + (lan.pipeType === opt ? ' selected' : '');
+      btn.innerHTML = '<span class="icon">' + (LAN_PIPE_ICONS[opt] || '') + '</span>' + (LAN_PIPE_LABELS[opt] || opt);
+      btn.addEventListener('click', function() { setLanPipeType(g.id, opt); });
       pGrid.appendChild(btn);
     });
     body.appendChild(pGrid);
   }
 
-  // 長さ（カメラ含む構成のときのみ入力UIを表示）
-  if (showLen) {
-    const lLabel = document.createElement('div');
-    lLabel.className = 'arm-sub-label';
-    lLabel.style.cssText = 'margin:12px 0 8px;';
-    lLabel.textContent = '📏 長さ（m）';
-    body.appendChild(lLabel);
+  // 長さ（m）— 初期値は台数×10があらかじめ入力済み
+  const lLabel = document.createElement('div');
+  lLabel.className = 'arm-sub-label';
+  lLabel.style.cssText = 'margin:12px 0 8px;';
+  lLabel.textContent = '📏 長さ（m）';
+  body.appendChild(lLabel);
 
-    const lRow = document.createElement('div');
-    lRow.className = 'inline-count-ctrl';
-    lRow.style.marginBottom = '4px';
-    lRow.innerHTML =
-      '<button class="cnt-btn" id="lanSegMinus_' + s.id + '">−</button>' +
-      '<div style="display:flex;align-items:baseline;gap:4px;">' +
-        '<input type="number" inputmode="decimal" min="0" class="cnt-val cnt-input" id="lanSegLen_' + s.id + '" style="font-size:24px;width:64px;text-align:center;" value="' + (s.length || 0) + '">' +
-        '<span style="font-size:13px;color:var(--text-dim);">m</span>' +
-      '</div>' +
-      '<button class="cnt-btn" id="lanSegPlus_' + s.id + '">＋</button>';
-    body.appendChild(lRow);
-    lRow.querySelector('#lanSegMinus_' + s.id).addEventListener('click', function() { lanSegLenChange(s.id, -5); });
-    lRow.querySelector('#lanSegPlus_' + s.id).addEventListener('click', function() { lanSegLenChange(s.id, 5); });
-    lRow.querySelector('#lanSegLen_' + s.id).addEventListener('input', function() { lanSegLenSet(s.id, this.value); });
-  }
-
-  // 削除ボタン（区間が2件以上のときのみ表示）
-  if (d.lanSegments.length > 1) {
-    const delBtn = document.createElement('button');
-    delBtn.className = 'card-act-btn';
-    delBtn.style.cssText = 'width:100%;margin-top:10px;font-size:12px;';
-    delBtn.textContent = '🗑️ この区間を削除';
-    delBtn.addEventListener('click', function() { removeLanSegment(s.id); });
-    body.appendChild(delBtn);
-  }
+  const lRow = document.createElement('div');
+  lRow.className = 'inline-count-ctrl';
+  lRow.style.marginBottom = '4px';
+  lRow.innerHTML =
+    '<button class="cnt-btn" id="lanGroupMinus_' + g.id + '">−</button>' +
+    '<div style="display:flex;align-items:baseline;gap:4px;">' +
+      '<input type="number" inputmode="decimal" min="0" class="cnt-val cnt-input" id="lanGroupLen_' + g.id + '" style="font-size:24px;width:64px;text-align:center;" value="' + (lan.length || 0) + '">' +
+      '<span style="font-size:13px;color:var(--text-dim);">m</span>' +
+    '</div>' +
+    '<button class="cnt-btn" id="lanGroupPlus_' + g.id + '">＋</button>';
+  body.appendChild(lRow);
+  lRow.querySelector('#lanGroupMinus_' + g.id).addEventListener('click', function() { lanGroupLenChange(g.id, -5); });
+  lRow.querySelector('#lanGroupPlus_' + g.id).addEventListener('click', function() { lanGroupLenChange(g.id, 5); });
+  lRow.querySelector('#lanGroupLen_' + g.id).addEventListener('input', function() { lanGroupLenSet(g.id, this.value); });
 
   wrap.appendChild(body);
   return wrap;
@@ -1260,7 +1332,12 @@ function validateGroupsForStep8() {
     } else if (g.deviceType === 'signage') {
       signage += g.count || 0;
     } else if (g.deviceType === 'lidar') {
-      lidar += g.count || 0;
+      var ln = lidarCountForGroup(g);
+      var ldArmT = lidarArmTotal(g);
+      lidar += ln;
+      if (ln < 1) issues.push(label + '：Lidar台数を入力してください');
+      else if (ln > g.count * LIDAR_PER_SYS) issues.push(label + '：Lidar台数がシステム上限('+(g.count*LIDAR_PER_SYS)+'台)を超えています');
+      else if (ldArmT !== ln) issues.push(label + '：アーム合計('+ldArmT+')とLidar合計('+ln+')が一致しません');
     }
   });
   return { ok: issues.length === 0, issues: issues, summary: { sys: sys, cam: cam, signage: signage, lidar: lidar } };
@@ -1302,7 +1379,7 @@ function renderGroupCamArmList() {
 // グループのデバイスサマリーテキストを返す（ヘッダー用）
 function groupDeviceSummary(g) {
   if (g.deviceType === 'signage') return 'サイネージ×' + (g.count || 0) + '台';
-  if (g.deviceType === 'lidar')   return 'Lidar×' + (g.count || 0) + '台';
+  if (g.deviceType === 'lidar')   return 'Lidar×' + lidarCountForGroup(g) + '台・arm' + lidarArmTotal(g) + '/' + lidarCountForGroup(g);
   var cam = (g.camIP || 0) + (g.camStereo || 0);
   var arm = armTotalForGroup(g);
   return 'sys' + (g.count||0) + '台・cam' + cam + '台・arm' + arm + '/' + cam;
@@ -1356,7 +1433,7 @@ function buildGroupCamArmDOM(g, idx) {
   body.appendChild(nameRow);
 
   // システム台数
-  var countLabel = deviceType === 'camera' ? '📦 システム台数' : '📦 システム台数（＝ ' + (deviceType === 'signage' ? 'サイネージ' : 'Lidar') + '台数）';
+  var countLabel = deviceType === 'signage' ? '📦 システム台数（＝ サイネージ台数）' : '📦 システム台数';
   var countRow = document.createElement('div');
   countRow.className = 'power-count-row';
   countRow.innerHTML =
@@ -1573,12 +1650,70 @@ function buildGroupCamArmDOM(g, idx) {
       armTotalRow.textContent = (match ? '✓ ' : '⚠️ ') + 'アーム合計 ' + armTotal + ' / カメラ合計 ' + totalCam + ' 台';
       body.appendChild(armTotalRow);
     }
+  } else if (deviceType === 'lidar') {
+    // Lidar台数セクション（上限 sys×8）
+    var maxLidar = g.count * LIDAR_PER_SYS;
+    var lidarN = lidarCountForGroup(g);
+    var ldLabel = document.createElement('div');
+    ldLabel.className = 'arm-sub-label';
+    ldLabel.style.cssText = 'margin:12px 0 8px;';
+    ldLabel.textContent = '📡 Lidar台数（上限 ' + maxLidar + '台）';
+    body.appendChild(ldLabel);
+
+    var ldRow = document.createElement('div');
+    ldRow.className = 'power-count-row';
+    ldRow.innerHTML =
+      '<div class="power-count-label">設置台数</div>' +
+      '<div class="camera-count-ctrl">' +
+        '<button class="cnt-btn" id="gld_m_' + g.id + '"' + (lidarN <= 1 ? ' disabled' : '') + '>−</button>' +
+        '<div class="cnt-val" style="font-size:18px;">' + lidarN + '</div>' +
+        '<button class="cnt-btn" id="gld_p_' + g.id + '"' + (lidarN >= maxLidar ? ' disabled' : '') + '>＋</button>' +
+        '<span style="font-size:11px;color:var(--text-dim);">台</span>' +
+      '</div>';
+    ldRow.querySelector('#gld_m_' + g.id).addEventListener('click', function() { pgLidarCountChange(g.id, -1); });
+    ldRow.querySelector('#gld_p_' + g.id).addEventListener('click', function() { pgLidarCountChange(g.id, 1); });
+    body.appendChild(ldRow);
+
+    // Lidarアーム選定セクション（合計=Lidar台数が必要）
+    var ldArmLabel = document.createElement('div');
+    ldArmLabel.className = 'arm-sub-label';
+    ldArmLabel.style.cssText = 'margin:12px 0 8px;';
+    ldArmLabel.textContent = '🔩 アーム選定・台数（Lidar台数と一致が必要）';
+    body.appendChild(ldArmLabel);
+
+    if (!g.lidarArm || typeof g.lidarArm !== 'object') g.lidarArm = {};
+    var ldArmSum = lidarArmTotal(g);
+    LIDAR_ARM_METHODS.forEach(function(m) {
+      var cnt = Number(g.lidarArm[m.key]) || 0;
+      var canInc = ldArmSum < lidarN;
+      var priceLabel = '¥' + m.price.toLocaleString();
+      var row = document.createElement('div');
+      row.className = 'power-count-row';
+      row.innerHTML =
+        '<div class="power-count-label">' + m.key +
+          ' <span style="color:var(--text-dim);">（' + priceLabel + '）</span></div>' +
+        '<div class="camera-count-ctrl">' +
+          '<button class="cnt-btn" id="gla_m_' + g.id + '_' + m.key + '"' + (cnt <= 0 ? ' disabled' : '') + '>−</button>' +
+          '<div class="cnt-val" style="font-size:18px;">' + cnt + '</div>' +
+          '<button class="cnt-btn" id="gla_p_' + g.id + '_' + m.key + '"' + (!canInc ? ' disabled' : '') + '>＋</button>' +
+          '<span style="font-size:11px;color:var(--text-dim);">台</span>' +
+        '</div>';
+      row.querySelector('#gla_m_' + g.id + '_' + m.key).addEventListener('click', function() { pgLidarArmChange(g.id, m.key, -1); });
+      row.querySelector('#gla_p_' + g.id + '_' + m.key).addEventListener('click', function() { pgLidarArmChange(g.id, m.key, 1); });
+      body.appendChild(row);
+    });
+
+    // アーム合計表示（一致しなければ赤）
+    var ldMatch = ldArmSum === lidarN;
+    var ldTotalRow = document.createElement('div');
+    ldTotalRow.style.cssText = 'font-size:12px;padding:6px 0;text-align:right;color:' + (ldMatch ? 'var(--text-dim)' : '#e44');
+    ldTotalRow.textContent = (ldMatch ? '✓ ' : '⚠️ ') + 'アーム合計 ' + ldArmSum + ' / Lidar合計 ' + lidarN + ' 台';
+    body.appendChild(ldTotalRow);
   } else {
-    // signage / lidar の概要表示
+    // signage の概要表示
     var infoRow = document.createElement('div');
     infoRow.style.cssText = 'font-size:12px;color:var(--text-dim);padding:8px 0;';
-    var devName = deviceType === 'signage' ? 'サイネージ' : 'Lidar';
-    infoRow.textContent = '※ ' + devName + 'はシステム台数と同じ台数（' + g.count + '台）。アーム取付なし。';
+    infoRow.textContent = '※ サイネージはシステム台数と同じ台数（' + g.count + '台）。アーム取付なし。';
     body.appendChild(infoRow);
   }
 
@@ -1674,6 +1809,43 @@ function pgArmReserveSet(gid, val) {
   if (!g || !g.armData || !g.armData.unknownOn) return;
   g.armData.reserveFee = val;
   renderGroupCamArmList();
+}
+
+// Lidar台数を増減する（[1, sys×8] にクランプ、アーム合計も追従）
+function pgLidarCountChange(gid, delta) {
+  const g = powerGroups.find(x => x.id === gid);
+  if (!g) return;
+  const max = (g.count || 1) * LIDAR_PER_SYS;
+  const cur = lidarCountForGroup(g);
+  g.lidarCount = Math.min(max, Math.max(1, cur + delta));
+  clampLidarArm(g);
+  renderGroupCamArmList();
+}
+
+// Lidarアーム種別の台数を増減する（合計はLidar台数を超えない）
+function pgLidarArmChange(gid, key, delta) {
+  const g = powerGroups.find(x => x.id === gid);
+  if (!g) return;
+  if (!g.lidarArm || typeof g.lidarArm !== 'object') g.lidarArm = {};
+  const next = Math.max(0, (Number(g.lidarArm[key]) || 0) + delta);
+  if (delta > 0 && lidarArmTotal(g) >= lidarCountForGroup(g)) return; // 上限到達
+  g.lidarArm[key] = next;
+  renderGroupCamArmList();
+}
+
+// Lidarアーム合計がLidar台数を超えないように丸める
+function clampLidarArm(g) {
+  if (!g || !g.lidarArm) return;
+  let over = lidarArmTotal(g) - lidarCountForGroup(g);
+  if (over <= 0) return;
+  // 後ろの種別から順に減らす
+  for (let i = LIDAR_ARM_METHODS.length - 1; i >= 0 && over > 0; i--) {
+    const k = LIDAR_ARM_METHODS[i].key;
+    const cur = Number(g.lidarArm[k]) || 0;
+    const dec = Math.min(cur, over);
+    g.lidarArm[k] = cur - dec;
+    over -= dec;
+  }
 }
 
 // 統合Step8 ステータスバーと次へボタンを更新する
@@ -2032,7 +2204,7 @@ function buildLanSegmentsText(r) {
   const total = segs.reduce((s, x) => s + (parseFloat(x.length) || 0), 0);
   const lines = ['配線（LAN）：合計 ' + total + 'm'];
   segs.forEach(function(s, i) {
-    const tag = '　区間' + (i + 1) + '：';
+    const tag = '　' + (s.label || ('区間' + (i + 1))) + '：';
     const method = s.wiring + (s.wiring === '配管' && s.pipeType ? '（' + s.pipeType + '）' : '');
     lines.push(tag + method + '　' + (s.length || 0) + 'm');
   });
@@ -2044,6 +2216,7 @@ function normalizeLanSegments(r) {
   if (Array.isArray(r.lanSegments) && r.lanSegments.length > 0) {
     return r.lanSegments.map(function(s) {
       return {
+        label: s.label || null,
         wiring: s.wiring || '',
         pipeType: s.pipeType || null,
         length: parseFloat(s.length) || 0,
@@ -2110,7 +2283,13 @@ function buildGroupSummaryText(groups) {
     } else if (deviceType === 'signage') {
       lines.push('　機器：サイネージ×' + (g.count||0) + '台');
     } else if (deviceType === 'lidar') {
-      lines.push('　機器：Lidar×' + (g.count||0) + '台');
+      lines.push('　機器：Lidar×' + lidarCountForGroup(g) + '台');
+      var ldArmLines = [];
+      LIDAR_ARM_METHODS.forEach(function(m) {
+        var n = (g.lidarArm && Number(g.lidarArm[m.key])) || 0;
+        if (n > 0) ldArmLines.push(m.key + '×' + n + '台');
+      });
+      lines.push('　アーム：' + (ldArmLines.length ? ldArmLines.join('・') : '未設定'));
     }
     if (g.memo && g.memo.trim()) lines.push('　メモ：' + g.memo.trim());
     return lines.join('\n');
@@ -2258,7 +2437,7 @@ function generateReport() {
   const ipTotal    = powerGroups.reduce((s, g) => s + (g.camIP || 0), 0);
   const sterTotal  = powerGroups.reduce((s, g) => s + (g.camStereo || 0), 0);
   const signageTotal = powerGroups.reduce((s, g) => s + (g.deviceType === 'signage' ? (g.count||0) : 0), 0);
-  const lidarTotal   = powerGroups.reduce((s, g) => s + (g.deviceType === 'lidar'   ? (g.count||0) : 0), 0);
+  const lidarTotal   = powerGroups.reduce((s, g) => s + (g.deviceType === 'lidar'   ? lidarCountForGroup(g) : 0), 0);
   const cameraCounts = {
     'IPカメラ': ipTotal,
     'ステレオカメラ': sterTotal,
@@ -2292,7 +2471,14 @@ function generateReport() {
     cameraCounts,
     armData:      JSON.parse(JSON.stringify(d.armData||{})),
     armText:      buildGroupArmText(powerGroups) || buildArmText(d.armData),
-    lanSegments:  JSON.parse(JSON.stringify(d.lanSegments || [])),
+    lanSegments:  (powerGroups || []).filter(groupNeedsLan).map(function(g, i) {
+      return {
+        label:    (g.groupName && g.groupName.trim()) ? g.groupName.trim() : ('グループ' + (i + 1)),
+        wiring:   g.lan ? g.lan.wiring : null,
+        pipeType: g.lan ? g.lan.pipeType : null,
+        length:   g.lan ? (parseFloat(g.lan.length) || 0) : 0,
+      };
+    }),
     wireSupport:  document.getElementById('wireSupport').value,
     powerGroups:  JSON.parse(JSON.stringify(powerGroups||[])),
     lanChange:    JSON.parse(JSON.stringify(d.lanChange||{})),
@@ -2587,7 +2773,7 @@ function buildLanSegmentsReadOnly(r) {
   const total = segs.reduce(function(s, x) { return s + (parseFloat(x.length) || 0); }, 0);
   const rows = segs.map(function(s, i) {
     const method = (s.wiring || '') + (s.wiring === '配管' && s.pipeType ? '（' + s.pipeType + '）' : '');
-    return '<div style="font-size:12px;padding:4px 0;color:var(--text-dim);">区間' + (i + 1) + '：' + method + '　' + (s.length || 0) + 'm</div>';
+    return '<div style="font-size:12px;padding:4px 0;color:var(--text-dim);">' + (s.label || ('区間' + (i + 1))) + '：' + method + '　' + (s.length || 0) + 'm</div>';
   }).join('');
   return '<div class="cedit-item">' +
     '<div class="cedit-item-label">🔌 LAN配線（合計' + total + 'm）</div>' +

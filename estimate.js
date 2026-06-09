@@ -16,6 +16,15 @@ const ARM_METHOD_PRICES = {
   ceil: { 'ビス': 0, 'アーム': 10000, 'マグネット': 10000 },
 };
 
+// Lidar設置・撤去の単価（1台）と専用アーム種別の単価
+const LIDAR_INSTALL_PRICE = 10000;
+const LIDAR_REMOVE_PRICE  = 6000;
+const LIDAR_ARM_PRICES = {
+  '仮設ポール': 2500,
+  'Lアングル':  5000,
+  'ボックス':   10000,
+};
+
 // グループの armData から取付方法別の費用明細を生成する
 function buildArmMethodLines(groups) {
   const out = [];
@@ -72,6 +81,7 @@ function getLanSegments(r) {
   if (Array.isArray(r.lanSegments) && r.lanSegments.length > 0) {
     return r.lanSegments.map(function(s) {
       return {
+        label: s.label || null,
         wiring: s.wiring || '',
         pipeType: s.pipeType || null,
         length: parseFloat(s.length) || 0,
@@ -194,17 +204,55 @@ function calcEstimate(r) {
     }
   }
 
+  // Lidar取付費・撤去費（カメラと同じ工事種別ロジック）
+  //   設置系（撤去以外）：取付費 ¥10,000/台 ＋ アーム種別ごとの単価
+  //   撤去系（撤去/仮設/交換/移設）：撤去費 ¥6,000/台
+  const lidarInstall = r.kojiType !== '撤去';
+  const lidarRemove  = r.kojiType === '撤去' || r.kojiType === '仮設'
+                    || r.kojiType === '交換' || r.kojiType === '移設';
+  (r.powerGroups || []).forEach(function(g, gi) {
+    if (g.deviceType !== 'lidar') return;
+    const lidarN = (g.lidarCount != null) ? (parseInt(g.lidarCount) || 0) : (g.count || 0);
+    if (lidarN <= 0) return;
+    const gTag = ((r.powerGroups || []).length > 1)
+      ? ' [' + ((g.groupName && g.groupName.trim()) || ('グループ' + (gi + 1))) + ']'
+      : '';
+    // 設置：取付費 ＋ アーム
+    if (lidarInstall) {
+      const fee = lidarN * LIDAR_INSTALL_PRICE;
+      lines.push({ label: `Lidar取付費${gTag}（${lidarN}台 × ${fmtYen(LIDAR_INSTALL_PRICE)}）`, val: fee });
+      total += fee;
+      const arm = g.lidarArm || {};
+      Object.keys(LIDAR_ARM_PRICES).forEach(function(key) {
+        const cnt = parseInt(arm[key]) || 0;
+        if (cnt <= 0) return;
+        const rate = LIDAR_ARM_PRICES[key];
+        const armFee = rate * cnt;
+        lines.push({ label: `Lidarアーム（${key}）${gTag}（${cnt}台 × ${fmtYen(rate)}）`, val: armFee });
+        total += armFee;
+      });
+    }
+    // 撤去：1台 ¥6,000
+    if (lidarRemove) {
+      const remFee = lidarN * LIDAR_REMOVE_PRICE;
+      lines.push({ label: `Lidar撤去費${gTag}（${lidarN}台 × ${fmtYen(LIDAR_REMOVE_PRICE)}）`, val: remFee });
+      total += remFee;
+    }
+  });
+
   // LAN配線：区間ベース計算（旧フィールドからのフォールバックも対応）
   const lanSegs = getLanSegments(r);
   const lan = lanSegs.reduce(function(s, x) { return s + (parseFloat(x.length) || 0); }, 0);
 
-  // カメラ（IP/ステレオ）がある場合のみ長さベースの費用を計上
-  // サイネージ/Lidarのみの構成では長さ入力をスキップしているため、延長費・配線費は計算しない
-  const lanHasCamera = (r.powerGroups || []).some(function(g) {
-    return g.deviceType === 'camera' && ((g.camIP || 0) + (g.camStereo || 0) > 0);
+  // LAN配線を要する機器（カメラ or Lidar）がある場合に長さベースの費用を計上
+  // サイネージのみの構成では長さ入力をスキップしているため、延長費・配線費は計算しない
+  const lanHasDevice = (r.powerGroups || []).some(function(g) {
+    if (g.deviceType === 'signage') return false;
+    if (g.deviceType === 'camera') return ((g.camIP || 0) + (g.camStereo || 0)) > 0;
+    return true; // lidar
   });
 
-  if (lanHasCamera) {
+  if (lanHasDevice) {
     // LANケーブル延長費（合計長さで判定）
     if (lan > 50) {
       const lanFee = Math.round((lan - 50) * 750);
@@ -216,7 +264,7 @@ function calcEstimate(r) {
     lanSegs.forEach(function(seg, i) {
       const len = parseFloat(seg.length) || 0;
       if (len <= 0) return;
-      const tag = lanSegs.length > 1 ? `（区間${i + 1}）` : '';
+      const tag = lanSegs.length > 1 ? `（${seg.label || ('区間' + (i + 1))}）` : '';
       if (seg.wiring === '露出') {
         const exposedFee = Math.round(len * PIPE_RATES['露出']);
         lines.push({ label: `LAN露出配線${tag}（${len}m × ${fmtYen(PIPE_RATES['露出'])}）`, val: exposedFee });
