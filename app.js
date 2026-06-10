@@ -50,6 +50,44 @@ const OFFICES = [
   },
 ];
 
+// 都道府県から地方区分を判定する（遠方費の会社推奨に使用）
+function classifyRegionFromPref(pref) {
+  if (!pref) return null;
+  if (pref === '北海道') return '北海道';
+  if (pref === '沖縄県') return '沖縄';
+  if (['青森県','岩手県','宮城県','秋田県','山形県','福島県'].includes(pref)) return '東北';
+  if (['新潟県','長野県','山梨県'].includes(pref)) return '甲信越';
+  if (['東京都','神奈川県','埼玉県','千葉県','茨城県','栃木県','群馬県'].includes(pref)) return '関東';
+  if (['大阪府','京都府','兵庫県','奈良県','滋賀県','和歌山県','三重県'].includes(pref)) return '関西';
+  if (['福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県'].includes(pref)) return '九州';
+  if (['鳥取県','島根県','岡山県','広島県','山口県','徳島県','香川県','愛媛県','高知県'].includes(pref)) return '中国・四国';
+  if (['静岡県','愛知県','岐阜県','富山県','石川県','福井県'].includes(pref)) return '中部';
+  return null;
+}
+
+// 地方区分から推奨施工会社を返す（null = どちらも可）
+//   北海道・沖縄・東北・甲信越 → SRM ／ 関東・都内 → どちらも ／ それ以外 → バディネット
+function recommendedCompany(region) {
+  if (['北海道','沖縄','東北','甲信越'].includes(region)) return 'SRM';
+  if (['関東','都内'].includes(region)) return null;
+  if (!region) return null;
+  return 'バディネット';
+}
+
+// Maps APIで距離が取れなかった場合のエリア別・会社別 代表片道距離(km)
+// 各社拠点からの概算。遠方費のフォールバック計算に使用する。
+const AREA_DIST = {
+  '都内':       { 'SRM': 10,   'バディネット': 10 },
+  '関東':       { 'SRM': 50,   'バディネット': 50 },
+  '甲信越':     { 'SRM': 250,  'バディネット': 250 },
+  '東北':       { 'SRM': 350,  'バディネット': 350 },
+  '関西':       { 'SRM': 500,  'バディネット': 15 },
+  '中国・四国': { 'SRM': 800,  'バディネット': 80 },
+  '九州':       { 'SRM': 1100, 'バディネット': 15 },
+  '北海道':     { 'SRM': 10,   'バディネット': 1150 },
+  '沖縄':       { 'SRM': 10,   'バディネット': 1800 },
+};
+
 // 総ステップ数
 const TOTAL = 14;
 // 選択可能な機器種別の定義（キー名・アイコン）
@@ -709,6 +747,7 @@ function pickArea(btn, val) {
   btn.closest('.btn-grid').querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
   d.area = val;
+  d.transportArea = val; // Maps失敗時の遠方費フォールバック（エリア代表距離）用
   const toggle = document.getElementById('areaDetailToggle');
   if (toggle) toggle.style.display = 'flex';
   const nb = document.getElementById('next6');
@@ -2464,6 +2503,9 @@ function generateReport() {
     area:         d.area || '',
     areaDetail:   (document.getElementById('areaDetail') && document.getElementById('areaDetail').value) || '',
     officeDistances: JSON.parse(JSON.stringify(d.officeDistances || [])),
+    transportRegion: d.transportRegion || null,
+    transportArea:   d.transportArea || '',
+    transportCompany: d.transportCompany || null,
     poleNew:      d.poleNew || '',
     poleCount:    d.poleCount || 1,
     poleBatchMode: d.poleBatchMode !== false,
@@ -2751,7 +2793,7 @@ function renderList() {
         ${makeEditItem(r.id,'kojiType','⚙️ 工事内容',r.kojiType,'choice',['設置','撤去','仮設','交換','移設'])}
         ${makeEditItem(r.id,'timeZone','🕐 時間帯',r.timeZone,'choice',['日中','夜間'])}
         ${makeEditItem(r.id,'location','📍 工事場所',r.location,'choice',['屋内','屋外'])}
-        ${makeEditItem(r.id,'area','🗾 エリア',r.area||'未選択','choice',['都内','関東','東北','関西','九州','北海道'])}
+        ${makeEditItem(r.id,'area','🗾 エリア',r.area||'未選択','choice',['都内','関東','東北','甲信越','関西','中国・四国','九州','北海道','沖縄'])}
         <div class="cedit-section-label" style="margin-top:10px;">作業計画</div>
         ${buildLanSegmentsReadOnly(r)}
         ${r.haizai ? makeEditItem(r.id,'haizai','♻️ 廃材処理',r.haizai,'choice',['引き取り（バカン）','施工会社が処分','現地残置','未定']) : ''}
@@ -2895,11 +2937,11 @@ function renderModalEstimate(r) {
       : (l.min === 0 ? `〜${fmtYen(l.max)}` : `${fmtYen(l.min)}〜${fmtYen(l.max)}`);
     return `<div class="estimate-row"><span class="estimate-row-label">${l.label}</span><span class="estimate-row-val">${valStr}</span></div>`;
   }).join('');
-  const transportRows = buildTransportRows(r);
-  const transportHtml = transportRows.length > 0
+  const altRows = buildTransportAltRows(r);
+  const transportHtml = altRows.length > 0
     ? '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
-      + '<div style="font-size:11px;color:var(--text-dim);font-weight:700;margin-bottom:6px;">🚗 交通費参考（施工費とは別）</div>'
-      + transportRows.map(function(row) {
+      + '<div style="font-size:11px;color:var(--text-dim);font-weight:700;margin-bottom:6px;">🚗 遠方費 他社参考</div>'
+      + altRows.map(function(row) {
           return `<div class="estimate-row"><span class="estimate-row-label">${row.label}</span><span class="estimate-row-val">${row.val}</span></div>`;
         }).join('')
       + '</div>'
@@ -3133,6 +3175,7 @@ function onPlaceSelected(place) {
 
   const prefecture = getPrefecture(place);
   const offices = getTargetOffices(prefecture);
+  d.transportRegion = classifyRegionFromPref(prefecture); // 遠方費の会社推奨用
 
   resultEl.style.display = 'block';
   resultEl.innerHTML = '<div style="font-size:12px;color:var(--text-dim);padding:12px 0;">🚗 距離・料金を計算中...</div>';
@@ -3218,25 +3261,75 @@ function calcDistanceMulti(place, offices, resultEl) {
 // ══════════════════════════════════════
 // 交通費計算
 // ══════════════════════════════════════
-// 距離・日数から交通費の概算テキストを生成する
+// 距離・日数から交通費の概算（金額とラベル）を計算する
 // days: 作業日数（nullの場合は1日として計算）
-function calcTransportLabel(distKm, distM, days) {
-  if (distM <= 20000) return '不要（目安）';
+function calcTransportInfo(distKm, distM, days) {
+  if (distM <= 20000) return { amount: 0, label: '不要（目安）' };
   const oneway = parseFloat(distKm);
   const roundTrip = Math.round(oneway * 2 * 110 * 1.1);
   const d = (!days || days <= 1) ? 1 : days;
   if (d <= 1) {
-    return '¥' + roundTrip.toLocaleString() + '程度（往復ETC込）';
+    return { amount: roundTrip, label: '¥' + roundTrip.toLocaleString() + '程度（往復ETC込）' };
   }
   if (oneway >= 100) {
     // 宿泊パターン：往復交通費 + 宿泊費¥10,000×泊数
     // 泊数：片道300km超は前泊込みで日数分、それ以外は日数-1泊
     const nights = oneway > 300 ? d : (d - 1);
     const total = roundTrip + (10000 * nights);
-    return '¥' + total.toLocaleString() + '程度（往復ETC込＋宿泊' + nights + '泊）';
+    return { amount: total, label: '¥' + total.toLocaleString() + '程度（往復ETC込＋宿泊' + nights + '泊）' };
   }
   // 日帰り複数日：往復×日数
-  return '¥' + (roundTrip * d).toLocaleString() + '程度（往復ETC込×' + d + '日）';
+  const total = roundTrip * d;
+  return { amount: total, label: '¥' + total.toLocaleString() + '程度（往復ETC込×' + d + '日）' };
+}
+
+// 距離・日数から交通費の概算テキストを返す（後方互換：距離結果カード等で使用）
+function calcTransportLabel(distKm, distM, days) {
+  return calcTransportInfo(distKm, distM, days).label;
+}
+
+// 遠方費の選択肢（会社ごと）を組み立てる
+//   Maps成功時：officeDistances の実距離、失敗時：エリア代表距離(AREA_DIST)を使用
+function buildTransportOptions(r) {
+  const days = (typeof getTransportDays === 'function') ? getTransportDays(r) : 1;
+  const region = r.transportRegion || r.transportArea || null;
+  const rec = recommendedCompany(region);
+  let opts = [];
+  const dists = r.officeDistances || [];
+  if (dists.length) {
+    opts = dists.map(function(od) {
+      const info = calcTransportInfo(od.distKm, od.distM, days);
+      return { company: od.company, name: od.name, distKm: od.distKm,
+               amount: info.amount, label: info.label, source: 'maps' };
+    });
+  } else if (r.transportArea && AREA_DIST[r.transportArea]) {
+    const tbl = AREA_DIST[r.transportArea];
+    opts = Object.keys(tbl).map(function(co) {
+      const km = tbl[co];
+      const info = calcTransportInfo(String(km), km * 1000, days);
+      return { company: co, name: r.transportArea + '（代表）', distKm: String(km),
+               amount: info.amount, label: info.label, source: 'area' };
+    });
+  }
+  opts.forEach(function(o) { o.recommended = !!(rec && o.company === rec); });
+  opts.sort(function(a, b) { return a.amount - b.amount; });
+  return opts;
+}
+
+// 選択中（未選択なら推奨→最安の順で既定）の遠方費オプションを返す
+function getSelectedTransport(r) {
+  const opts = buildTransportOptions(r);
+  if (!opts.length) return null;
+  let sel = opts.find(function(o) { return o.company === r.transportCompany; });
+  if (!sel) sel = opts.find(function(o) { return o.recommended; }) || opts[0];
+  return sel || null;
+}
+
+// 遠方費の会社選択（見積パネルのラジオから呼ばれる）
+function selectTransportCompany(company) {
+  if (!currentReport) return;
+  currentReport.transportCompany = company;
+  renderEstimate(currentReport);
 }
 
 // ══════════════════════════════════════

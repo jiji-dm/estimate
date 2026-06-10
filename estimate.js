@@ -434,6 +434,14 @@ function calcEstimate(r) {
     total += moorFee;
   }
 
+  // 遠方費（選択した施工会社の交通費・宿泊費）※15%諸経費の対象に含める
+  const tSel = (typeof getSelectedTransport === 'function') ? getSelectedTransport(r) : null;
+  if (tSel && tSel.amount > 0) {
+    const srcNote = tSel.source === 'area' ? '・エリア概算' : '';
+    lines.push({ label: `遠方費（${tSel.company}・${tSel.name}${srcNote}）`, val: tSel.amount });
+    total += tSel.amount;
+  }
+
   // 法定福利費・諸経費 15%
   const overhead = Math.round(total * 0.15);
   const overheadMin = Math.round(rangeMin * 0.15);
@@ -491,21 +499,11 @@ function renderEstimate(r) {
     rangeEl.style.display = 'none';
   }
 
-  // 交通費参考表示
+  // 遠方費：施工会社の選択UI（選んだ会社の額が上の合計に遠方費として計上される）
   const transpEl = document.getElementById('estimateTransport');
   if (transpEl) {
-    const transportRows = buildTransportRows(r);
-    if (transportRows.length > 0) {
-      transpEl.innerHTML = '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">'
-        + '<div style="font-size:11px;color:var(--text-dim);font-weight:700;margin-bottom:6px;">🚗 交通費参考（施工費とは別）</div>'
-        + transportRows.map(function(row) {
-            return `<div class="estimate-row"><span class="estimate-row-label">${row.label}</span><span class="estimate-row-val">${row.val}</span></div>`;
-          }).join('')
-        + '</div>';
-      transpEl.style.display = 'block';
-    } else {
-      transpEl.style.display = 'none';
-    }
+    transpEl.innerHTML = buildTransportSelectorHtml(r);
+    transpEl.style.display = transpEl.innerHTML ? 'block' : 'none';
   }
 
   sec.style.display = 'block';
@@ -526,16 +524,55 @@ function getTransportDays(r) {
   return days > 0 ? days : 1;
 }
 
-// officeDistances と作業日数から交通費参考行を生成する
-function buildTransportRows(r) {
-  const dists = r.officeDistances || [];
-  if (!dists.length) return [];
-  const days = getTransportDays(r);
-  return dists.map(function(od) {
-    const label = `交通費（${od.company}・${od.name}、${od.distKm}km）`;
-    const val = calcTransportLabel(od.distKm, od.distM, days);
-    return { label: label, val: val };
-  });
+// 遠方費：施工会社の選択UI(HTML)を生成する。選択肢が無ければ空文字。
+function buildTransportSelectorHtml(r) {
+  const opts = buildTransportOptions(r);
+  if (!opts.length) return '';
+  const sel = getSelectedTransport(r);
+  const selCompany = sel ? sel.company : null;
+  const region = r.transportRegion || r.transportArea || null;
+  const rec = recommendedCompany(region);
+  const isArea = opts[0].source === 'area';
+
+  let html = '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">'
+    + '<div style="font-size:11px;color:var(--text-dim);font-weight:700;margin-bottom:8px;">🚗 遠方費：施工会社を選択（合計に計上）</div>';
+
+  html += opts.map(function(o) {
+    const checked = o.company === selCompany;
+    const badge = o.recommended ? ' <span style="color:var(--accent2);font-weight:700;">⭐推奨</span>' : '';
+    const border = checked ? 'var(--accent2)' : 'var(--border)';
+    const bg = checked ? 'rgba(120,160,255,0.08)' : 'transparent';
+    return '<label onclick="selectTransportCompany(\'' + o.company + '\')" '
+      + 'style="display:flex;align-items:center;justify-content:space-between;gap:8px;'
+      + 'padding:8px 10px;margin-bottom:6px;border:1px solid ' + border + ';border-radius:8px;'
+      + 'background:' + bg + ';cursor:pointer;">'
+      + '<span style="display:flex;align-items:center;gap:6px;font-size:12px;">'
+      + '<input type="radio" name="transportCompany" ' + (checked ? 'checked' : '') + ' style="pointer-events:none;">'
+      + '<span>' + o.company + '（' + o.name + '）' + badge + '</span></span>'
+      + '<span style="font-size:12px;font-weight:700;white-space:nowrap;">' + o.label + '</span>'
+      + '</label>';
+  }).join('');
+
+  if (rec === null && opts.length > 1) {
+    html += '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">関東はどちらの会社でも対応可能です。</div>';
+  }
+  if (isArea) {
+    html += '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">※住所が取得できなかったため、エリア代表距離による概算です。</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// 選択していない会社の遠方費を「他社参考」行として返す（モーダル・テキスト表示用）
+function buildTransportAltRows(r) {
+  const opts = buildTransportOptions(r);
+  if (opts.length <= 1) return [];
+  const sel = getSelectedTransport(r);
+  const selCompany = sel ? sel.company : null;
+  return opts.filter(function(o) { return o.company !== selCompany; })
+    .map(function(o) {
+      return { label: `他社参考：${o.company}（${o.name}）`, val: o.label };
+    });
 }
 
 // 見積をダウンロード用のテキスト形式に変換する
@@ -563,16 +600,17 @@ function buildEstimateText(r) {
   if (est.hasRange) {
     lines.push(`　※変動項目を含む場合：${fmtYen(est.finalMin)}〜${fmtYen(est.finalMax)}`);
   }
-  const transportRows = buildTransportRows(r);
-  if (transportRows.length > 0) {
+  const altRows = buildTransportAltRows(r);
+  if (altRows.length > 0) {
     lines.push('');
-    lines.push('■ 交通費参考（施工費とは別途）');
-    transportRows.forEach(function(row) {
+    lines.push('■ 遠方費 他社参考');
+    altRows.forEach(function(row) {
       lines.push(`　${row.label}：${row.val}`);
     });
   }
   lines.push('');
   lines.push('※施工費のみの概算です。実際の費用は現場状況により変動します。');
+  lines.push('※遠方費は選択した施工会社の交通費・宿泊費を計上しています。');
   return lines.join('\n');
 }
 
