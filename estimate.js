@@ -512,11 +512,25 @@ function renderEstimate(r) {
   dlBtn.style.display = 'block';
 }
 
+// Step11「作業計画」の構造から交通費計算用の作業日数を取り出す
+// 仮設：install（設置）+ remove（撤去）の合計、それ以外：single の日数
+function getTransportDays(r) {
+  const wp = r.workPlan || {};
+  let days;
+  if (r.kojiType === '仮設') {
+    days = (parseInt(wp.install && wp.install.days) || 0)
+         + (parseInt(wp.remove  && wp.remove.days)  || 0);
+  } else {
+    days = parseInt(wp.single && wp.single.days) || 0;
+  }
+  return days > 0 ? days : 1;
+}
+
 // officeDistances と作業日数から交通費参考行を生成する
 function buildTransportRows(r) {
   const dists = r.officeDistances || [];
   if (!dists.length) return [];
-  const days = parseInt(((r.workPlan || {}).days)) || 1;
+  const days = getTransportDays(r);
   return dists.map(function(od) {
     const label = `交通費（${od.company}・${od.name}、${od.distKm}km）`;
     const val = calcTransportLabel(od.distKm, od.distM, days);

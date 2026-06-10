@@ -2463,6 +2463,7 @@ function generateReport() {
     armHandling:  d.armHandling || '',
     area:         d.area || '',
     areaDetail:   (document.getElementById('areaDetail') && document.getElementById('areaDetail').value) || '',
+    officeDistances: JSON.parse(JSON.stringify(d.officeDistances || [])),
     poleNew:      d.poleNew || '',
     poleCount:    d.poleCount || 1,
     poleBatchMode: d.poleBatchMode !== false,
@@ -3139,6 +3140,19 @@ function onPlaceSelected(place) {
   calcDistanceMulti(place, offices, resultEl);
 }
 
+// 会社ごとに現場へ一番近い拠点だけを残す（SRM・バディネット それぞれ最寄り1ヶ所）
+function nearestPerCompany(results) {
+  const byCompany = {};
+  results.forEach(function(r) {
+    const c = r.office.company;
+    if (!byCompany[c] || r.distM < byCompany[c].distM) byCompany[c] = r;
+  });
+  // 元の距離順に並べて返す
+  return Object.keys(byCompany)
+    .map(function(c) { return byCompany[c]; })
+    .sort(function(a, b) { return a.distM - b.distM; });
+}
+
 // 複数拠点から現場までの距離をDistance Matrix APIで一括取得し表示する
 function calcDistanceMulti(place, offices, resultEl) {
   const service = new google.maps.DistanceMatrixService();
@@ -3170,16 +3184,8 @@ function calcDistanceMulti(place, offices, resultEl) {
       return;
     }
 
-    // nearGroup（関西・九州）は近い方だけ残す
-    const nearGroups = [...new Set(results.map(r => r.office.nearGroup).filter(Boolean))];
-    let filtered = [...results];
-    nearGroups.forEach(function(grp) {
-      const grpItems = results.filter(r => r.office.nearGroup === grp);
-      const nearest = grpItems.reduce((a, b) => a.distM < b.distM ? a : b);
-      grpItems.forEach(function(item) {
-        if (item !== nearest) filtered = filtered.filter(r => r !== item);
-      });
-    });
+    // 会社ごとに最寄り1拠点だけ残す
+    const filtered = nearestPerCompany(results);
 
     d.officeDistances = filtered.map(r => ({
       company: r.office.company, name: r.office.name,
@@ -3309,15 +3315,8 @@ function calcDistanceMultiThen(place, offices, callback) {
       return;
     }
 
-    const nearGroups = [...new Set(results.map(r => r.office.nearGroup).filter(Boolean))];
-    let filtered = [...results];
-    nearGroups.forEach(function(grp) {
-      const grpItems = results.filter(r => r.office.nearGroup === grp);
-      const nearest = grpItems.reduce((a, b) => a.distM < b.distM ? a : b);
-      grpItems.forEach(function(item) {
-        if (item !== nearest) filtered = filtered.filter(r => r !== item);
-      });
-    });
+    // 会社ごとに最寄り1拠点だけ残す
+    const filtered = nearestPerCompany(results);
 
     d.officeDistances = filtered.map(r => ({
       company: r.office.company, name: r.office.name,
