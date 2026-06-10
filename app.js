@@ -3229,9 +3229,11 @@ function calcTransportLabel(distKm, distM, days) {
     return '¥' + roundTrip.toLocaleString() + '程度（往復ETC込）';
   }
   if (oneway >= 100) {
-    // 宿泊パターン：往復交通費 + 宿泊費¥10,000×日数
-    const total = roundTrip + (10000 * d);
-    return '¥' + total.toLocaleString() + '程度（往復ETC込＋宿泊' + d + '日）';
+    // 宿泊パターン：往復交通費 + 宿泊費¥10,000×泊数
+    // 泊数：片道300km超は前泊込みで日数分、それ以外は日数-1泊
+    const nights = oneway > 300 ? d : (d - 1);
+    const total = roundTrip + (10000 * nights);
+    return '¥' + total.toLocaleString() + '程度（往復ETC込＋宿泊' + nights + '泊）';
   }
   // 日帰り複数日：往復×日数
   return '¥' + (roundTrip * d).toLocaleString() + '程度（往復ETC込×' + d + '日）';
