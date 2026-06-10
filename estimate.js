@@ -505,6 +505,8 @@ function renderEstimate(r) {
     transpEl.innerHTML = buildTransportSelectorHtml(r);
     transpEl.style.display = transpEl.innerHTML ? 'block' : 'none';
   }
+  // 遠方費を変数として保持（他ツールへ受け渡し可能にする）
+  storeTransportFee(r);
 
   sec.style.display = 'block';
   dlBtn.style.display = 'block';
@@ -542,14 +544,22 @@ function buildTransportSelectorHtml(r) {
     const badge = o.recommended ? ' <span style="color:var(--accent2);font-weight:700;">⭐推奨</span>' : '';
     const border = checked ? 'var(--accent2)' : 'var(--border)';
     const bg = checked ? 'rgba(120,160,255,0.08)' : 'transparent';
+    // 内訳（交通費＋宿泊費）
+    let detail = '';
+    if (o.amount > 0) {
+      detail = '交通費 ' + fmtYen(o.transport);
+      if (o.lodging > 0) detail += ' ＋ 宿泊費 ' + fmtYen(o.lodging) + '（' + o.nights + '泊）';
+    }
     return '<label onclick="selectTransportCompany(\'' + o.company + '\')" '
-      + 'style="display:flex;align-items:center;justify-content:space-between;gap:8px;'
-      + 'padding:8px 10px;margin-bottom:6px;border:1px solid ' + border + ';border-radius:8px;'
-      + 'background:' + bg + ';cursor:pointer;">'
+      + 'style="display:block;padding:8px 10px;margin-bottom:6px;border:1px solid ' + border + ';'
+      + 'border-radius:8px;background:' + bg + ';cursor:pointer;">'
+      + '<span style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
       + '<span style="display:flex;align-items:center;gap:6px;font-size:12px;">'
       + '<input type="radio" name="transportCompany" ' + (checked ? 'checked' : '') + ' style="pointer-events:none;">'
       + '<span>' + o.company + '（' + o.name + '）' + badge + '</span></span>'
       + '<span style="font-size:12px;font-weight:700;white-space:nowrap;">' + o.label + '</span>'
+      + '</span>'
+      + (detail ? '<span style="display:block;font-size:11px;color:var(--text-dim);margin-top:4px;padding-left:22px;">' + detail + '</span>' : '')
       + '</label>';
   }).join('');
 

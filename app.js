@@ -2506,6 +2506,8 @@ function generateReport() {
     transportRegion: d.transportRegion || null,
     transportArea:   d.transportArea || '',
     transportCompany: d.transportCompany || null,
+    transportFee:    0,    // 遠方費 合計（renderEstimate で確定）
+    transportFeeDetail: null, // 遠方費 内訳（会社・交通費・宿泊費・泊数）
     poleNew:      d.poleNew || '',
     poleCount:    d.poleCount || 1,
     poleBatchMode: d.poleBatchMode !== false,
@@ -3264,23 +3266,29 @@ function calcDistanceMulti(place, offices, resultEl) {
 // 距離・日数から交通費の概算（金額とラベル）を計算する
 // days: 作業日数（nullの場合は1日として計算）
 function calcTransportInfo(distKm, distM, days) {
-  if (distM <= 20000) return { amount: 0, label: '不要（目安）' };
+  if (distM <= 20000) {
+    return { amount: 0, transport: 0, lodging: 0, nights: 0, label: '不要（目安）' };
+  }
   const oneway = parseFloat(distKm);
   const roundTrip = Math.round(oneway * 2 * 110 * 1.1);
   const d = (!days || days <= 1) ? 1 : days;
   if (d <= 1) {
-    return { amount: roundTrip, label: '¥' + roundTrip.toLocaleString() + '程度（往復ETC込）' };
+    return { amount: roundTrip, transport: roundTrip, lodging: 0, nights: 0,
+             label: '¥' + roundTrip.toLocaleString() + '程度（往復ETC込）' };
   }
   if (oneway >= 100) {
     // 宿泊パターン：往復交通費 + 宿泊費¥10,000×泊数
     // 泊数：片道300km超は前泊込みで日数分、それ以外は日数-1泊
     const nights = oneway > 300 ? d : (d - 1);
-    const total = roundTrip + (10000 * nights);
-    return { amount: total, label: '¥' + total.toLocaleString() + '程度（往復ETC込＋宿泊' + nights + '泊）' };
+    const lodging = 10000 * nights;
+    const total = roundTrip + lodging;
+    return { amount: total, transport: roundTrip, lodging: lodging, nights: nights,
+             label: '¥' + total.toLocaleString() + '程度（往復ETC込＋宿泊' + nights + '泊）' };
   }
-  // 日帰り複数日：往復×日数
+  // 日帰り複数日：往復×日数（すべて交通費・宿泊なし）
   const total = roundTrip * d;
-  return { amount: total, label: '¥' + total.toLocaleString() + '程度（往復ETC込×' + d + '日）' };
+  return { amount: total, transport: total, lodging: 0, nights: 0,
+           label: '¥' + total.toLocaleString() + '程度（往復ETC込×' + d + '日）' };
 }
 
 // 距離・日数から交通費の概算テキストを返す（後方互換：距離結果カード等で使用）
@@ -3300,7 +3308,8 @@ function buildTransportOptions(r) {
     opts = dists.map(function(od) {
       const info = calcTransportInfo(od.distKm, od.distM, days);
       return { company: od.company, name: od.name, distKm: od.distKm,
-               amount: info.amount, label: info.label, source: 'maps' };
+               amount: info.amount, transport: info.transport, lodging: info.lodging,
+               nights: info.nights, label: info.label, source: 'maps' };
     });
   } else if (r.transportArea && AREA_DIST[r.transportArea]) {
     const tbl = AREA_DIST[r.transportArea];
@@ -3308,7 +3317,8 @@ function buildTransportOptions(r) {
       const km = tbl[co];
       const info = calcTransportInfo(String(km), km * 1000, days);
       return { company: co, name: r.transportArea + '（代表）', distKm: String(km),
-               amount: info.amount, label: info.label, source: 'area' };
+               amount: info.amount, transport: info.transport, lodging: info.lodging,
+               nights: info.nights, label: info.label, source: 'area' };
     });
   }
   opts.forEach(function(o) { o.recommended = !!(rec && o.company === rec); });
@@ -3330,6 +3340,25 @@ function selectTransportCompany(company) {
   if (!currentReport) return;
   currentReport.transportCompany = company;
   renderEstimate(currentReport);
+}
+
+// 選択中の遠方費を r に変数として保存する（他ツールへの受け渡し用）
+//   r.transportFee       … 遠方費の合計金額（数値）
+//   r.transportFeeDetail … 内訳オブジェクト（会社・交通費・宿泊費・泊数など）
+function storeTransportFee(r) {
+  if (!r) return;
+  const sel = getSelectedTransport(r);
+  r.transportFee = sel ? sel.amount : 0;
+  r.transportFeeDetail = sel ? {
+    company:   sel.company,
+    name:      sel.name,
+    distKm:    sel.distKm,
+    transport: sel.transport, // 交通費（往復ETC込）
+    lodging:   sel.lodging,   // 宿泊費
+    nights:    sel.nights,    // 泊数
+    amount:    sel.amount,    // 遠方費 合計
+    source:    sel.source     // 'maps'（実距離）/ 'area'（エリア概算）
+  } : null;
 }
 
 // ══════════════════════════════════════
