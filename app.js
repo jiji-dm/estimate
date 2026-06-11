@@ -74,6 +74,9 @@ function recommendedCompany(region) {
   return 'バディネット';
 }
 
+// バカン本社住所（現調費・バカンの遠方費はここから現場までの距離で算出）
+const BAKAN_HQ = '東京都中央区新川2-8-4';
+
 // Maps APIで距離が取れなかった場合のエリア別・会社別 代表片道距離(km)
 // 各社拠点からの概算。遠方費のフォールバック計算に使用する。
 const AREA_DIST = {
@@ -176,6 +179,8 @@ let lanSegId = 0;
 d.poleCount     = 1;
 d.poleBatchMode = true;
 d.poleItems     = [{ excavation: null, finish: null }];
+// 現調費（バカン／施工会社をそれぞれ人数付きで選択。標準は1:1）
+d.gentyo = { bakan: { on: true, people: 1 }, vendor: { on: true, people: 1 } };
 
 // ══════════════════════════════════════
 // カレンダー（複数インスタンス対応）
@@ -973,6 +978,7 @@ function showStep(n) {
   if (n === 9) initLanStep();
   if (n === 10) initPowerStep();
   if (n === 11) buildWorkStep();
+  if (n === 14) initGentyoStep();
 }
 
 // LAN変更確認ブロック（交換/移設のみ表示）の表示制御と選択状態の復元
@@ -1023,6 +1029,7 @@ function setLocationConfirmed(confirmed) {
   } else {
     SKIP_STEPS.delete(6);
     d.officeDistances = null;
+    d.bakanDistance = null;
   }
 }
 
@@ -2201,6 +2208,83 @@ function kosoEquipPick(btn, val) {
     }
   }
 }
+// ══════════════════════════════════════
+// 現調費（Step14）
+// ══════════════════════════════════════
+// 現調費の状態を取得（未初期化なら標準1:1で生成）
+function ensureGentyo() {
+  if (!d.gentyo) d.gentyo = { bakan: { on: true, people: 1 }, vendor: { on: true, people: 1 } };
+  if (!d.gentyo.bakan)  d.gentyo.bakan  = { on: true, people: 1 };
+  if (!d.gentyo.vendor) d.gentyo.vendor = { on: true, people: 1 };
+  return d.gentyo;
+}
+// Step14到達時：現調費カードを描画し、次へボタンを有効化（標準値があるため常に進める）
+function initGentyoStep() {
+  renderGentyoCards();
+  const btn = document.getElementById('next14');
+  if (btn) btn.disabled = false;
+}
+// 現調費の1枚分のカードHTMLを生成する
+function gentyoCardHtml(key, title, hint, state) {
+  const on = !!state.on;
+  const people = Math.max(1, state.people || 1);
+  const border = on ? 'var(--accent2)' : 'var(--border)';
+  const bg = on ? 'rgba(120,160,255,0.08)' : 'transparent';
+  let html = '<div class="gentyo-card" id="gentyoCard_' + key + '" '
+    + 'style="border:1px solid ' + border + ';border-radius:10px;background:' + bg + ';padding:10px 12px;margin-bottom:8px;">'
+    + '<div onclick="toggleGentyo(\'' + key + '\')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;">'
+    + '<span style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;">'
+    + '<input type="checkbox" ' + (on ? 'checked' : '') + ' style="pointer-events:none;width:16px;height:16px;">'
+    + '<span>' + title + '</span></span>'
+    + '<span style="font-size:11px;color:var(--text-dim);font-weight:400;text-align:right;">' + hint + '</span>'
+    + '</div>';
+  if (on) {
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">'
+      + '<span style="font-size:12px;color:var(--text-dim);">人数</span>'
+      + '<div class="camera-count-ctrl">'
+      + '<button type="button" class="cnt-btn" onclick="gentyoPeople(\'' + key + '\',-1)"' + (people <= 1 ? ' disabled' : '') + '>−</button>'
+      + '<span class="cnt-val" style="min-width:44px;text-align:center;">' + people + '</span>'
+      + '<button type="button" class="cnt-btn" onclick="gentyoPeople(\'' + key + '\',1)">＋</button>'
+      + '<span style="font-size:11px;color:var(--text-dim);margin-left:4px;">名</span>'
+      + '</div></div>';
+  }
+  html += '</div>';
+  return html;
+}
+// 現調費カード全体を描画する
+function renderGentyoCards() {
+  const el = document.getElementById('gentyoCards');
+  if (!el) return;
+  const g = ensureGentyo();
+  const none = !g.bakan.on && !g.vendor.on;
+  el.innerHTML =
+    gentyoCardHtml('bakan',  '🏢 バカン',    '人件費 ¥30,000/名 ＋ 遠方費※', g.bakan)
+    + gentyoCardHtml('vendor', '🏗️ 施工会社', '機器別セット ＋ 既存の遠方費', g.vendor)
+    + '<button type="button" onclick="setGentyoNone()" '
+    + 'style="width:100%;padding:8px;border:1px solid ' + (none ? 'var(--accent2)' : 'var(--border)') + ';'
+    + 'border-radius:10px;background:' + (none ? 'rgba(120,160,255,0.08)' : 'transparent') + ';'
+    + 'color:var(--text);font-size:13px;cursor:pointer;">🚫 なし（¥0）</button>';
+}
+// 現調費：バカン／施工会社のオン/オフを切り替える
+function toggleGentyo(key) {
+  const g = ensureGentyo();
+  g[key].on = !g[key].on;
+  renderGentyoCards();
+}
+// 現調費：人数を増減する（最低1名）
+function gentyoPeople(key, delta) {
+  const g = ensureGentyo();
+  g[key].people = Math.max(1, (g[key].people || 1) + delta);
+  renderGentyoCards();
+}
+// 現調費：なし（バカン・施工会社いずれも計上しない）
+function setGentyoNone() {
+  const g = ensureGentyo();
+  g.bakan.on = false;
+  g.vendor.on = false;
+  renderGentyoCards();
+}
+
 // 特記事項入力欄の表示/非表示を切り替える
 function toggleToku(mode) {
   tokuMode = mode;
@@ -2456,9 +2540,19 @@ ${buildLanSegmentsText(r)}
 ${buildWorkPlanText(r)}
 
 【備考】
-${r.tokuLine}
+現調費　：${buildGentyoSummary(r)}
+特記事項：${r.tokuLine}
 
 ━━━━━━━━━━━━━━━━━━━━━━`;
+}
+
+// 現調費の選択内容を短い文字列にする（バカン N名／施工会社 N名／なし）
+function buildGentyoSummary(r) {
+  const g = r.gentyo || {};
+  const parts = [];
+  if (g.bakan && g.bakan.on) parts.push('バカン ' + Math.max(1, g.bakan.people || 1) + '名');
+  if (g.vendor && g.vendor.on) parts.push('施工会社 ' + Math.max(1, g.vendor.people || 1) + '名');
+  return parts.length ? parts.join('／') : 'なし';
 }
 
 // フォームの入力値から currentReport を生成し結果パネルに表示する
@@ -2508,6 +2602,8 @@ function generateReport() {
     transportCompany: d.transportCompany || null,
     transportFee:    0,    // 遠方費 合計（renderEstimate で確定）
     transportFeeDetail: null, // 遠方費 内訳（会社・交通費・宿泊費・泊数）
+    gentyo:       JSON.parse(JSON.stringify(ensureGentyo())), // 現調費（バカン／施工会社・人数）
+    bakanDistance: d.bakanDistance ? JSON.parse(JSON.stringify(d.bakanDistance)) : null, // バカン本社→現場 距離
     poleNew:      d.poleNew || '',
     poleCount:    d.poleCount || 1,
     poleBatchMode: d.poleBatchMode !== false,
@@ -3201,8 +3297,10 @@ function nearestPerCompany(results) {
 // 複数拠点から現場までの距離をDistance Matrix APIで一括取得し表示する
 function calcDistanceMulti(place, offices, resultEl) {
   const service = new google.maps.DistanceMatrixService();
+  // 施工会社の各拠点に加え、末尾にバカン本社を足して一括取得（現調費・バカンの遠方費用）
+  const origins = offices.map(o => o.address).concat([BAKAN_HQ]);
   service.getDistanceMatrix({
-    origins: offices.map(o => o.address),
+    origins: origins,
     destinations: [place.geometry.location],
     travelMode: google.maps.TravelMode.DRIVING,
     unitSystem: google.maps.UnitSystem.METRIC,
@@ -3211,6 +3309,12 @@ function calcDistanceMulti(place, offices, resultEl) {
       resultEl.innerHTML = '<div style="font-size:12px;color:var(--danger);padding:8px 0;">距離の取得に失敗しました</div>';
       return;
     }
+
+    // バカン本社→現場の距離（末尾の行）を保持
+    const bakanEl = resp.rows[offices.length] && resp.rows[offices.length].elements[0];
+    d.bakanDistance = (bakanEl && bakanEl.status === 'OK')
+      ? { distKm: (bakanEl.distance.value / 1000).toFixed(1), distM: bakanEl.distance.value }
+      : null;
 
     // 結果を整理
     const results = offices.map(function(o, i) {

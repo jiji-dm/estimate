@@ -476,8 +476,15 @@
         <button class="back-btn" onclick="prevStep()">← 戻る</button>
       </div>
 
-      <!-- Step 14: 特別条件 -->
+      <!-- Step 14: 現調費・特別条件 -->
       <div class="step" data-step="14">
+
+        <!-- 現調費 -->
+        <div class="field-section" style="margin-bottom:16px;">
+          <div class="field-section-label">🔍 現調費 <span style="font-size:11px;font-weight:400;color:var(--text-dim);">わからない場合は1:1が標準</span></div>
+          <div id="gentyoCards"></div>
+        </div>
+
         <div class="step-q">その他特別条件はありますか？</div>
         <div class="toggle-row">
           <button class="toggle-btn" id="tokNone" onclick="toggleToku('none')">✅ なし</button>

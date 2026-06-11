@@ -98,6 +98,94 @@ function getLanSegments(r) {
   return [];
 }
 
+// 現調費の単価
+const GENTYO_BAKAN_PERSON   = 30000; // バカン 人件費（1名）
+const GENTYO_VENDOR_CAM_BASE = 30000, GENTYO_VENDOR_CAM_ADD   = 5500; // 施工会社 IPステカメ：基本＋1sys
+const GENTYO_VENDOR_SIGN_BASE = 10000, GENTYO_VENDOR_SIGN_ADD  = 5000; // 施工会社 サイネージ：1台目＋以降
+const GENTYO_VENDOR_LIDAR_BASE = 10000, GENTYO_VENDOR_LIDAR_ADD = 5000; // 施工会社 Lidar：1台目＋以降
+
+// 現調費の機器台数（カメラ系・サイネージ・Lidar・システム数）を集計する
+function gentyoCounts(r) {
+  const groups = r.powerGroups || [];
+  const counts = r.cameraCounts || {};
+  const camTotal = groups.reduce(function(s, g) { return s + (g.camIP || 0) + (g.camStereo || 0); }, 0)
+                || ((counts['IPカメラ'] || 0) + (counts['ステレオカメラ'] || 0));
+  const signageTotal = groups.reduce(function(s, g) { return s + (g.deviceType === 'signage' ? (g.count || 0) : 0); }, 0)
+                || (counts['サイネージ'] || 0);
+  const lidarTotal = groups.reduce(function(s, g) {
+    if (g.deviceType !== 'lidar') return s;
+    return s + ((g.lidarCount != null) ? (parseInt(g.lidarCount) || 0) : (g.count || 0));
+  }, 0) || (counts['Lidar'] || 0);
+  const sysCount = r.systemCount || 1;
+  return { camTotal: camTotal, signageTotal: signageTotal, lidarTotal: lidarTotal, sysCount: sysCount };
+}
+
+// 現調費（バカン／施工会社）を計算する。明細(lines)と合計(total)を返す。
+//   遠方費は現調=1日（往復のみ）として算出。バカンは新川本社から、施工会社は選択会社から。
+function calcGentyoFee(r) {
+  const g = r.gentyo || {};
+  const lines = [];
+  let total = 0;
+
+  // ── バカン：人件費 ¥30,000 × 人数 ＋ 遠方費（新川本社→現場・往復のみ） ──
+  if (g.bakan && g.bakan.on) {
+    const people = Math.max(1, g.bakan.people || 1);
+    const labor = GENTYO_BAKAN_PERSON * people;
+    lines.push({ label: `現調費・バカン 人件費（¥30,000 × ${people}名）`, val: labor });
+    total += labor;
+
+    let transport = 0;
+    const bd = r.bakanDistance;
+    if (bd && typeof calcTransportInfo === 'function') {
+      transport = calcTransportInfo(bd.distKm, bd.distM, 1).amount;
+    }
+    if (transport > 0) {
+      lines.push({ label: `現調費・バカン 遠方費（往復ETC込）`, val: transport });
+      total += transport;
+    }
+  }
+
+  // ── 施工会社：機器別セット × 人数 ＋ 既存の遠方費（選択会社→現場・往復のみ） ──
+  if (g.vendor && g.vendor.on) {
+    const people = Math.max(1, g.vendor.people || 1);
+    const c = gentyoCounts(r);
+    const parts = [];
+    let setFee = 0;
+    if (c.camTotal > 0) {
+      const f = GENTYO_VENDOR_CAM_BASE + GENTYO_VENDOR_CAM_ADD * Math.max(0, c.sysCount - 1);
+      setFee += f;
+      parts.push(`カメラ ${fmtYen(f)}`);
+    }
+    if (c.signageTotal > 0) {
+      const f = GENTYO_VENDOR_SIGN_BASE + GENTYO_VENDOR_SIGN_ADD * Math.max(0, c.signageTotal - 1);
+      setFee += f;
+      parts.push(`サイネージ ${fmtYen(f)}`);
+    }
+    if (c.lidarTotal > 0) {
+      const f = GENTYO_VENDOR_LIDAR_BASE + GENTYO_VENDOR_LIDAR_ADD * Math.max(0, c.lidarTotal - 1);
+      setFee += f;
+      parts.push(`Lidar ${fmtYen(f)}`);
+    }
+    if (setFee > 0) {
+      const setTotal = setFee * people;
+      lines.push({ label: `現調費・施工会社 機器別セット（${parts.join(' ＋ ')}）× ${people}名`, val: setTotal });
+      total += setTotal;
+    }
+
+    let transport = 0;
+    const sel = (typeof getSelectedTransport === 'function') ? getSelectedTransport(r) : null;
+    if (sel && typeof calcTransportInfo === 'function') {
+      transport = calcTransportInfo(sel.distKm, sel.distM, 1).amount;
+    }
+    if (transport > 0) {
+      lines.push({ label: `現調費・施工会社 遠方費（${sel.company}・往復ETC込）`, val: transport });
+      total += transport;
+    }
+  }
+
+  return { lines: lines, total: total };
+}
+
 // currentReport を受け取り工事費の明細と合計を計算して返す
 function calcEstimate(r) {
   const lines = [];
@@ -448,6 +536,13 @@ function calcEstimate(r) {
   const overheadMax = Math.round(rangeMax * 0.15);
   lines.push({ label: `法定福利費・諸経費（15%）`, val: overhead });
   total += overhead;
+
+  // 現調費（バカン／施工会社）※諸経費の対象外・別枠で計上
+  const gentyo = (typeof calcGentyoFee === 'function') ? calcGentyoFee(r) : { lines: [], total: 0 };
+  if (gentyo.total > 0) {
+    gentyo.lines.forEach(function(l) { lines.push(l); });
+    total += gentyo.total;
+  }
 
   const finalMin = total + overheadMin;
   const finalMax = total + overheadMax;
