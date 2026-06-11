@@ -530,19 +530,19 @@ function calcEstimate(r) {
     total += tSel.amount;
   }
 
-  // 法定福利費・諸経費 15%
-  const overhead = Math.round(total * 0.15);
-  const overheadMin = Math.round(rangeMin * 0.15);
-  const overheadMax = Math.round(rangeMax * 0.15);
-  lines.push({ label: `法定福利費・諸経費（15%）`, val: overhead });
-  total += overhead;
-
-  // 現調費（バカン／施工会社）※諸経費の対象外・別枠で計上
+  // 現調費（バカン／施工会社）※15%諸経費の対象に含める
   const gentyo = (typeof calcGentyoFee === 'function') ? calcGentyoFee(r) : { lines: [], total: 0 };
   if (gentyo.total > 0) {
     gentyo.lines.forEach(function(l) { lines.push(l); });
     total += gentyo.total;
   }
+
+  // 法定福利費・諸経費 15%（現調費を含む全項目の合計に対して算出）
+  const overhead = Math.round(total * 0.15);
+  const overheadMin = Math.round(rangeMin * 0.15);
+  const overheadMax = Math.round(rangeMax * 0.15);
+  lines.push({ label: `法定福利費・諸経費（15%）`, val: overhead });
+  total += overhead;
 
   const finalMin = total + overheadMin;
   const finalMax = total + overheadMax;
