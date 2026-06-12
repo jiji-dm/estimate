@@ -1,0 +1,32 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- ベース: ブランド紫 #512376 (RGB 81,35,118) / 案E: 電卓×コイン＋VACAN -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6a3a96"/>
+      <stop offset="1" stop-color="#461d68"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- 背面の V (VACAN) 透かし -->
+  <path d="M 70 56 L 256 412 L 442 56 L 366 56 L 256 268 L 146 56 Z" fill="#ffffff" opacity="0.12"/>
+  <!-- 電卓 -->
+  <rect x="156" y="84" width="180" height="230" rx="26" fill="#ffffff"/>
+  <rect x="184" y="114" width="124" height="46" rx="10" fill="#512376"/>
+  <circle cx="206" cy="196" r="13" fill="#512376"/>
+  <circle cx="252" cy="196" r="13" fill="#512376"/>
+  <circle cx="298" cy="196" r="13" fill="#512376"/>
+  <circle cx="206" cy="242" r="13" fill="#512376"/>
+  <circle cx="252" cy="242" r="13" fill="#512376"/>
+  <circle cx="206" cy="288" r="13" fill="#512376"/>
+  <!-- コイン（¥は2本線） -->
+  <circle cx="340" cy="302" r="80" fill="#56307e"/>
+  <circle cx="340" cy="302" r="64" fill="#ffffff"/>
+  <g stroke="#512376" stroke-width="10" stroke-linecap="round" fill="none">
+    <path d="M 318 270 L 340 298 L 362 270"/>
+    <path d="M 340 298 L 340 336"/>
+    <path d="M 322 308 L 358 308"/>
+    <path d="M 322 324 L 358 324"/>
+  </g>
+  <!-- 社名 -->
+  <text x="262" y="454" text-anchor="middle" fill="#ffffff" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="62" font-weight="bold" letter-spacing="12">VACAN</text>
+</svg>

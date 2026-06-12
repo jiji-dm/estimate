@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>現調レポート</title>
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#512376">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="現調レポート">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDtKIT6SPD8z5kGSLjV3uBF9l19BD65mo8&libraries=places&callback=initAutocomplete" async defer></script>
@@ -14,7 +21,7 @@
     position: fixed;
     inset: 0;
     z-index: 9999;
-    background: var(--bg, #0a0a0f);
+    background: var(--bg, #f1ecf7);
     display: flex; /* JSで切り替え */
     flex-direction: column;
     align-items: center;
@@ -35,19 +42,19 @@
     font-family: 'Syne', sans-serif;
     font-size: 26px;
     font-weight: 700;
-    color: #e2e2ee;
+    color: #1a1424;
     margin: 0 0 4px;
     letter-spacing: 0.02em;
   }
   #authGate .auth-sub {
     font-family: 'Syne', sans-serif;
     font-size: 11px;
-    color: #666680;
+    color: #5b5167;
     letter-spacing: 0.18em;
     margin-bottom: 28px;
   }
   #authGate .auth-desc {
-    color: #999;
+    color: #5b5167;
     font-size: 13px;
     line-height: 1.7;
     margin-bottom: 32px;
@@ -59,24 +66,24 @@
   }
   #authGate #authLoading {
     display: none;
-    color: #999;
+    color: #8a8295;
     font-size: 12px;
     margin-top: 18px;
   }
   #authGate #authError {
     display: none;
-    color: #ff7a7a;
+    color: #e11d48;
     font-size: 13px;
     line-height: 1.6;
     margin-top: 18px;
     padding: 10px 14px;
-    background: rgba(255, 122, 122, 0.08);
+    background: rgba(225, 29, 72, 0.08);
     border-radius: 8px;
   }
   #authGate .auth-footnote {
     margin-top: 24px;
     font-size: 11px;
-    color: #444;
+    color: #8a8295;
     letter-spacing: 0.05em;
   }
 </style>
@@ -313,7 +320,7 @@
         <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">グループごとに配線方法・配管種別・長さを入力してください<br>※長さは「台数×10m」を初期値として自動入力済み（サイネージは入力不要）</div>
 
         <!-- 交換/移設のときのみ表示：LAN変更有無の確認 -->
-        <div id="lanChangeQuery" style="display:none;margin-bottom:16px;padding:12px;background:rgba(255,255,255,0.04);border-radius:8px;">
+        <div id="lanChangeQuery" style="display:none;margin-bottom:16px;padding:12px;background:#ebe3f3;border:1px solid #d9cce7;border-radius:8px;">
           <div style="font-size:13px;color:var(--text-dim);margin-bottom:10px;">
             💡 LANケーブルの長さは変わりますか？以下を確認してください
           </div>
@@ -585,5 +592,13 @@
 <script src="auth.js"></script>
 <script src="app.js"></script>
 <script src="estimate.js"></script>
+<script>
+// PWA: Service Worker 登録（file:// 直開きでは無効）
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW登録失敗', e));
+  });
+}
+</script>
 </body>
 </html>
