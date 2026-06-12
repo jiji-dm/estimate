@@ -1692,7 +1692,7 @@ function buildGroupCamArmDOM(g, idx) {
       // アーム合計表示（一致しなければ赤）
       var match = armTotal === totalCam;
       var armTotalRow = document.createElement('div');
-      armTotalRow.style.cssText = 'font-size:12px;padding:6px 0;text-align:right;color:' + (match ? 'var(--text-dim)' : '#e44');
+      armTotalRow.style.cssText = 'font-size:12px;padding:6px 0;text-align:right;color:' + (match ? 'var(--text-dim)' : 'var(--danger)');
       armTotalRow.textContent = (match ? '✓ ' : '⚠️ ') + 'アーム合計 ' + armTotal + ' / カメラ合計 ' + totalCam + ' 台';
       body.appendChild(armTotalRow);
     }
@@ -1752,7 +1752,7 @@ function buildGroupCamArmDOM(g, idx) {
     // アーム合計表示（一致しなければ赤）
     var ldMatch = ldArmSum === lidarN;
     var ldTotalRow = document.createElement('div');
-    ldTotalRow.style.cssText = 'font-size:12px;padding:6px 0;text-align:right;color:' + (ldMatch ? 'var(--text-dim)' : '#e44');
+    ldTotalRow.style.cssText = 'font-size:12px;padding:6px 0;text-align:right;color:' + (ldMatch ? 'var(--text-dim)' : 'var(--danger)');
     ldTotalRow.textContent = (ldMatch ? '✓ ' : '⚠️ ') + 'アーム合計 ' + ldArmSum + ' / Lidar合計 ' + lidarN + ' 台';
     body.appendChild(ldTotalRow);
   } else {
@@ -2229,7 +2229,7 @@ function gentyoCardHtml(key, title, hint, state) {
   const on = !!state.on;
   const people = Math.max(1, state.people || 1);
   const border = on ? 'var(--accent2)' : 'var(--border)';
-  const bg = on ? 'rgba(120,160,255,0.08)' : 'transparent';
+  const bg = on ? 'rgba(81,35,118,0.06)' : 'transparent';
   let html = '<div class="gentyo-card" id="gentyoCard_' + key + '" '
     + 'style="border:1px solid ' + border + ';border-radius:10px;background:' + bg + ';padding:10px 12px;margin-bottom:8px;">'
     + '<div onclick="toggleGentyo(\'' + key + '\')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;">'
@@ -2262,7 +2262,7 @@ function renderGentyoCards() {
     + gentyoCardHtml('vendor', '🏗️ 施工会社', '機器別セット ＋ 既存の遠方費', g.vendor)
     + '<button type="button" onclick="setGentyoNone()" '
     + 'style="width:100%;padding:8px;border:1px solid ' + (none ? 'var(--accent2)' : 'var(--border)') + ';'
-    + 'border-radius:10px;background:' + (none ? 'rgba(120,160,255,0.08)' : 'transparent') + ';'
+    + 'border-radius:10px;background:' + (none ? 'rgba(81,35,118,0.06)' : 'transparent') + ';'
     + 'color:var(--text);font-size:13px;cursor:pointer;">🚫 なし（¥0）</button>';
 }
 // 現調費：バカン／施工会社のオン/オフを切り替える
@@ -2859,7 +2859,7 @@ function renderList() {
   lbl.textContent = list.length ? list.length + ' 件のレポート' : '';
   const el = document.getElementById('listContent');
   if (!list.length) {
-    el.innerHTML = `<div class="list-empty"><div class="em">📂</div><div>保存済みレポートはありません</div><div style="font-size:12px;margin-top:8px;color:#444;">入力後「アプリ内保存」を押すと<br>ここに表示されます</div></div>`;
+    el.innerHTML = `<div class="list-empty"><div class="em">📂</div><div>保存済みレポートはありません</div><div style="font-size:12px;margin-top:8px;color:var(--text-dim);">入力後「アプリ内保存」を押すと<br>ここに表示されます</div></div>`;
     return;
   }
   el.innerHTML = list.map(r => {
