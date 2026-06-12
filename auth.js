@@ -145,6 +145,15 @@ function initAuthGate() {
 // 起動ロジック
 // ───────────────────────────────────────────────
 (function bootAuth() {
+  const DEV_SKIP_AUTH = false; // ⚠️ ローカル確認用。push/デプロイ前に必ず false に戻す
+  if (DEV_SKIP_AUTH) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', showApp);
+    } else {
+      showApp();
+    }
+    return;
+  }
   // 既存セッションがあればすぐにゲートを閉じる
   if (checkAuthSession()) {
     // DOM がまだの場合に備えて遅延実行も保険で用意
