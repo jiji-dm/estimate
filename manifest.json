@@ -1,7 +1,7 @@
 {
-  "name": "現調レポート（概算見積）",
-  "short_name": "現調レポート",
-  "description": "IPカメラ等設置工事の現地調査・概算見積アプリ",
+  "name": "概算見積App",
+  "short_name": "概算App",
+  "description": "IPカメラ等設置工事の施工費を概算見積するツール",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

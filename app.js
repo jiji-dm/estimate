@@ -2511,7 +2511,7 @@ function buildText(r) {
   const areaLine        = r.area ? ('エリア　　：'+r.area+(r.areaDetail?' '+r.areaDetail:'')) : '';
   const poleLine        = buildPoleText(r);
   return `━━━━━━━━━━━━━━━━━━━━━━
-　現調レポート
+　概算見積レポート
 　作成日：${r.createdAt}
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -2757,7 +2757,7 @@ function exportAll() {
   if (!list.length) { showToast('保存済みデータがありません', 'red'); return; }
   const text = list.map(r => buildText(r)).join('\n\n' + '═'.repeat(40) + '\n\n');
   const today = new Date();
-  const fname = today.getFullYear()+'_'+String(today.getMonth()+1).padStart(2,'0')+'_'+String(today.getDate()).padStart(2,'0')+'_現調レポート全件.txt';
+  const fname = today.getFullYear()+'_'+String(today.getMonth()+1).padStart(2,'0')+'_'+String(today.getDate()).padStart(2,'0')+'_概算見積全件.txt';
   dl(text, fname);
   showToast('全' + list.length + '件を書き出しました！', 'green');
 }

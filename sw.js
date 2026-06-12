@@ -6,7 +6,7 @@
 //   - キャッシュ対象は同一オリジンの GET のみ
 //     （Google認証・Maps 等の外部リクエストには関与しない）
 // ══════════════════════════════════════════════════════════════
-const CACHE_NAME = 'gencho-shell-v3'; // app.js等を更新したら数字を上げる
+const CACHE_NAME = 'gencho-shell-v4'; // app.js等を更新したら数字を上げる
 const SHELL = [
   './',
   './index.html',
