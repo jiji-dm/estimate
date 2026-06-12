@@ -6,7 +6,7 @@
 //   - キャッシュ対象は同一オリジンの GET のみ
 //     （Google認証・Maps 等の外部リクエストには関与しない）
 // ══════════════════════════════════════════════════════════════
-const CACHE_NAME = 'gencho-shell-v2'; // app.js等を更新したら数字を上げる
+const CACHE_NAME = 'gencho-shell-v3'; // app.js等を更新したら数字を上げる
 const SHELL = [
   './',
   './index.html',
@@ -17,7 +17,10 @@ const SHELL = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './icons/icon.svg',
+  './icons/favicon-32.png',
+  './icons/favicon-16.png'
 ];
 
 self.addEventListener('install', (event) => {
