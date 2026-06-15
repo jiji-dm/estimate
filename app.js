@@ -283,6 +283,7 @@ function addPowerGroup() {
     newType: null,
     newDistMode: '10m以下', newDistVal: 10,
     pipe: null, pipeType: null,
+    pipeMode: 'auto', pipes: [],
     open: true,
     deviceType: 'camera',
     camIP: 0,
@@ -328,16 +329,36 @@ function isPowerGroupComplete(g) {
   if (g.power === 'unknown') return true;
   if (g.power === 'yes') {
     if (!g.pipe) return false;
-    if (g.pipe === 'yes' && !g.pipeType) return false;
+    if (g.pipe === 'yes' && !powerPipeChosen(g)) return false;
     return true;
   }
   if (g.power === 'no') {
     if (!g.newType) return false;
     if (!g.pipe) return false;
-    if (g.pipe === 'yes' && !g.pipeType) return false;
+    if (g.pipe === 'yes' && !powerPipeChosen(g)) return false;
     return true;
   }
   return false;
+}
+
+// 配管「あり」の電源グループで配管種別が選べているか
+//   自動モード：pipeType が選択済み / 個別モード：種別付き配管が1本以上
+function powerPipeChosen(g) {
+  if ((g.pipeMode || 'auto') === 'manual') {
+    return Array.isArray(g.pipes) && g.pipes.some(function(p) { return !!p.pipeType; });
+  }
+  return !!g.pipeType;
+}
+
+// 配管「あり」グループのサマリー用ラベル（自動：種別 / 個別：本数＋種別）
+function powerPipeSummary(g) {
+  if ((g.pipeMode || 'auto') === 'manual') {
+    const valid = (g.pipes || []).filter(function(p) { return p.pipeType; });
+    if (!valid.length) return '配管あり（個別）';
+    const total = valid.reduce(function(s, p) { return s + (parseFloat(p.length) || 0); }, 0);
+    return '配管あり（個別' + valid.length + '本・計' + total + 'm）';
+  }
+  return '配管あり（' + g.pipeType + '）';
 }
 
 // 電源グループの設定内容をサマリーテキストで返す
@@ -346,16 +367,160 @@ function getPowerGroupSummary(g) {
   if (g.power === 'unknown') return '既設電源：不明';
   if (g.power === 'yes') {
     const dist = g.distMode === '1m以内' ? '1m以内' : g.distVal+'m';
-    const pipe = g.pipe === 'yes' ? '配管あり（'+g.pipeType+'）' : g.pipe === 'no' ? '配管なし' : '';
+    const pipe = g.pipe === 'yes' ? powerPipeSummary(g) : g.pipe === 'no' ? '配管なし' : '';
     return '既設あり・'+dist+(pipe?' ・'+pipe:'');
   }
   if (g.power === 'no') {
     const type = g.newType || '';
     const dist = g.newType ? (g.newDistMode === '10m以下' ? '10m以下' : g.newDistVal+'m') : '';
-    const pipe = g.pipe === 'yes' ? '配管あり（'+g.pipeType+'）' : g.pipe === 'no' ? '配管なし' : '';
+    const pipe = g.pipe === 'yes' ? powerPipeSummary(g) : g.pipe === 'no' ? '配管なし' : '';
     return '既設なし・'+type+(dist?' '+dist:'')+(pipe?' ・'+pipe:'');
   }
   return '';
+}
+
+// ══════════════════════════════════════
+// 配管リスト共通UI（自動 / 個別 モード切替）
+// ══════════════════════════════════════
+// 「長さから自動算出」＝従来どおり配線長さ（電源距離／LAN長さ）から1種別ぶん計上。
+// 「配管を個別指定」＝複数の配管を {pipeType, length} で並べ、各々±1/±10で長さ調整。
+// 配管エントリのID採番カウンター
+let conduitRowId = 0;
+
+// 個別指定で選べる配管種別（用途別）。値は estimate.js の PIPE_RATES と一致させる
+const PIPE_TYPE_OPTS_POWER = [
+  ['VE管(塩ビ)','🟡 VE管'],['P薄鋼電線管','🔩 P薄鋼'],
+  ['Pドブ付(溶融亜鉛めっき)','⚙️ Pドブ'],['露出','📎 露出'],['モール','📏 モール'],
+];
+const PIPE_TYPE_OPTS_LAN = [
+  ['VE管(塩ビ)','🟡 VE管'],['P薄鋼電線管','🔩 P薄鋼'],
+  ['Pドブ付(溶融亜鉛めっき)','⚙️ Pドブ'],['モール','📏 モール'],
+];
+
+// 状態オブジェクトに配管エントリ配列を確保する
+function ensureConduitPipes(c) {
+  if (!Array.isArray(c.pipes)) c.pipes = [];
+  return c.pipes;
+}
+
+// 配管リストUIを構築して返す。
+//   c   : { pipeMode:'auto'|'manual', pipes:[{id,pipeType,length}] } を持つ状態オブジェクト
+//   cfg : {
+//     pipeOpts    : [[value,label],...]  個別指定で選べる配管種別
+//     autoNode    : HTMLElement|null     自動モードで表示する既存UI（種別ボタン群など）
+//     rerender    : function(){}         変更後に親リスト全体を再描画
+//     onLenChange : function(){}|null    長さ増減時の軽量更新（合計バー等）。省略可
+//     defaultLen  : number               「配管を追加」時の初期長さ
+//   }
+function buildConduitListDOM(c, cfg) {
+  const wrap = document.createElement('div');
+  wrap.className = 'conduit-block';
+  const mode = c.pipeMode || 'auto';
+
+  // モード切替トグル
+  const modeRow = document.createElement('div');
+  modeRow.className = 'conduit-mode-toggle';
+  [['auto','📐 長さから自動'],['manual','🔧 配管を個別指定']].forEach(function(pair) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'conduit-mode-btn' + (mode === pair[0] ? ' sel' : '');
+    btn.textContent = pair[1];
+    btn.addEventListener('click', function() {
+      c.pipeMode = pair[0];
+      if (pair[0] === 'manual' && ensureConduitPipes(c).length === 0) {
+        c.pipes.push({ id: ++conduitRowId, pipeType: cfg.pipeOpts[0][0], length: cfg.defaultLen || 10 });
+      }
+      cfg.rerender();
+    });
+    modeRow.appendChild(btn);
+  });
+  wrap.appendChild(modeRow);
+
+  if (mode === 'auto') {
+    if (cfg.autoNode) wrap.appendChild(cfg.autoNode);
+    return wrap;
+  }
+
+  // 個別モード：配管エントリのリスト
+  ensureConduitPipes(c);
+  const listEl = document.createElement('div');
+  listEl.className = 'conduit-list';
+  c.pipes.forEach(function(p) { listEl.appendChild(buildConduitRowDOM(c, p, cfg)); });
+  wrap.appendChild(listEl);
+
+  // 配管を追加
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'conduit-add-btn';
+  addBtn.textContent = '＋ 配管を追加';
+  addBtn.addEventListener('click', function() {
+    ensureConduitPipes(c).push({ id: ++conduitRowId, pipeType: cfg.pipeOpts[0][0], length: cfg.defaultLen || 10 });
+    cfg.rerender();
+  });
+  wrap.appendChild(addBtn);
+  return wrap;
+}
+
+// 配管1本ぶんの行（種別選択＋長さ±1/±10＋削除）を構築
+function buildConduitRowDOM(c, p, cfg) {
+  if (p.id == null) p.id = ++conduitRowId;
+  const row = document.createElement('div');
+  row.className = 'conduit-row';
+
+  // 種別選択
+  const typeGrid = document.createElement('div');
+  typeGrid.className = 'conduit-type-grid';
+  cfg.pipeOpts.forEach(function(pair) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'conduit-type-btn' + (p.pipeType === pair[0] ? ' sel' : '');
+    btn.textContent = pair[1];
+    btn.addEventListener('click', function() { p.pipeType = pair[0]; cfg.rerender(); });
+    typeGrid.appendChild(btn);
+  });
+  row.appendChild(typeGrid);
+
+  // 長さ（m）：−10 −1 [値] ＋1 ＋10
+  const inputId = 'conduitLen_' + p.id;
+  const lenRow = document.createElement('div');
+  lenRow.className = 'conduit-len-ctrl';
+  lenRow.innerHTML =
+    '<button type="button" class="cnt-btn sm conduit-step" data-d="-10">−10</button>' +
+    '<button type="button" class="cnt-btn sm conduit-step" data-d="-1">−1</button>' +
+    '<div class="conduit-len-val">' +
+      '<input type="number" inputmode="decimal" min="0" class="cnt-val cnt-input" id="' + inputId + '" value="' + (p.length || 0) + '">' +
+      '<span class="conduit-len-unit">m</span>' +
+    '</div>' +
+    '<button type="button" class="cnt-btn sm conduit-step" data-d="1">＋1</button>' +
+    '<button type="button" class="cnt-btn sm conduit-step" data-d="10">＋10</button>';
+  lenRow.querySelectorAll('.conduit-step').forEach(function(b) {
+    b.addEventListener('click', function() {
+      const delta = parseFloat(b.getAttribute('data-d')) || 0;
+      p.length = Math.max(0, (parseFloat(p.length) || 0) + delta);
+      const el = document.getElementById(inputId);
+      if (el) el.value = p.length;
+      if (cfg.onLenChange) cfg.onLenChange();
+    });
+  });
+  lenRow.querySelector('#' + inputId).addEventListener('input', function() {
+    var n = parseFloat(this.value);
+    if (isNaN(n) || n < 0) n = 0;
+    p.length = n;
+    if (cfg.onLenChange) cfg.onLenChange();
+  });
+  row.appendChild(lenRow);
+
+  // 削除
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'conduit-del-btn';
+  del.textContent = '✕ この配管を削除';
+  del.addEventListener('click', function() {
+    c.pipes = (c.pipes || []).filter(function(x) { return x.id !== p.id; });
+    cfg.rerender();
+  });
+  row.appendChild(del);
+  return row;
 }
 
 // 電源グループ1件分のDOMノードを生成して返す
@@ -526,7 +691,14 @@ function buildPowerGroupDOM(g, idx, sysTotal) {
         btn.addEventListener('click', function(){ pgSet(g.id,'pipeType',pair[0]); });
         psub.appendChild(btn);
       });
-      body.appendChild(psub);
+      if (!g.pipeMode) g.pipeMode = 'auto';
+      // 自動：電源距離から1種別ぶん算出（従来） / 個別：複数配管を長さ付きで指定
+      body.appendChild(buildConduitListDOM(g, {
+        pipeOpts: PIPE_TYPE_OPTS_POWER,
+        autoNode: psub,
+        rerender: renderPowerGroups,
+        defaultLen: 10,
+      }));
     }
   }
 
@@ -1111,9 +1283,11 @@ function hasLanDevices() {
 // 未編集（lenTouched=false）なら台数変動に追従して初期長さを再計算）
 function ensureGroupLan(g) {
   if (!g.lan) {
-    g.lan = { wiring: null, pipeType: null, length: lanGroupDefaultLen(g), lenTouched: false };
-  } else if (!g.lan.lenTouched) {
-    g.lan.length = lanGroupDefaultLen(g);
+    g.lan = { wiring: null, pipeType: null, length: lanGroupDefaultLen(g), lenTouched: false, pipeMode: 'auto', pipes: [] };
+  } else {
+    if (!g.lan.lenTouched) g.lan.length = lanGroupDefaultLen(g);
+    if (!g.lan.pipeMode) g.lan.pipeMode = 'auto';
+    if (!Array.isArray(g.lan.pipes)) g.lan.pipes = [];
   }
   return g.lan;
 }
@@ -1181,8 +1355,17 @@ function lanGroupLenSet(gid, val) {
 function isLanGroupComplete(g) {
   if (!groupNeedsLan(g)) return true;
   if (!g.lan || !g.lan.wiring) return false;
-  if (g.lan.wiring === '配管' && !g.lan.pipeType) return false;
+  if (g.lan.wiring === '配管' && !lanPipeChosen(g.lan)) return false;
   return true;
+}
+
+// 配管配線のLANで配管種別が選べているか
+//   自動モード：pipeType が選択済み / 個別モード：種別付き配管が1本以上
+function lanPipeChosen(lan) {
+  if ((lan.pipeMode || 'auto') === 'manual') {
+    return Array.isArray(lan.pipes) && lan.pipes.some(function(p) { return !!p.pipeType; });
+  }
+  return !!lan.pipeType;
 }
 
 // 全グループ入力済みかどうかで次へボタンの有効化を制御
@@ -1244,7 +1427,17 @@ function buildLanGroupDOM(g, idx) {
   if (!needsLan) {
     summary = '🖥️ LAN配線の入力は不要';
   } else if (complete) {
-    summary = lan.wiring + (lan.wiring === '配管' && lan.pipeType ? '（' + lan.pipeType + '）' : '') + ' ' + (lan.length || 0) + 'm';
+    let pipeTag = '';
+    if (lan.wiring === '配管') {
+      if ((lan.pipeMode || 'auto') === 'manual') {
+        const vp = (lan.pipes || []).filter(function(p) { return p.pipeType; });
+        const pm = vp.reduce(function(s, p) { return s + (parseFloat(p.length) || 0); }, 0);
+        pipeTag = '（個別' + vp.length + '本・計' + pm + 'm）';
+      } else if (lan.pipeType) {
+        pipeTag = '（' + lan.pipeType + '）';
+      }
+    }
+    summary = lan.wiring + pipeTag + ' ' + (lan.length || 0) + 'm';
   } else {
     summary = '未入力（' + deviceLabel + '）';
   }
@@ -1302,7 +1495,7 @@ function buildLanGroupDOM(g, idx) {
   });
   body.appendChild(wGrid);
 
-  // 配管種別（配管選択時のみ）
+  // 配管種別（配管選択時のみ）。自動：LAN長さから1種別ぶん算出 / 個別：複数配管を長さ付きで指定
   if (lan.wiring === '配管') {
     const pLabel = document.createElement('div');
     pLabel.className = 'arm-sub-label';
@@ -1310,6 +1503,7 @@ function buildLanGroupDOM(g, idx) {
     pLabel.textContent = '🔧 配管の種別';
     body.appendChild(pLabel);
 
+    // 自動モードで表示する従来の種別ボタン群
     const pGrid = document.createElement('div');
     pGrid.className = 'btn-grid col2';
     pGrid.style.marginBottom = '4px';
@@ -1320,7 +1514,13 @@ function buildLanGroupDOM(g, idx) {
       btn.addEventListener('click', function() { setLanPipeType(g.id, opt); });
       pGrid.appendChild(btn);
     });
-    body.appendChild(pGrid);
+
+    body.appendChild(buildConduitListDOM(lan, {
+      pipeOpts: PIPE_TYPE_OPTS_LAN,
+      autoNode: pGrid,
+      rerender: renderLanGroups,
+      defaultLen: 10,
+    }));
   }
 
   // 長さ（m）— 初期値は台数×10があらかじめ入力済み
@@ -2328,8 +2528,16 @@ function buildLanSegmentsText(r) {
   const lines = ['配線（LAN）：合計 ' + total + 'm'];
   segs.forEach(function(s, i) {
     const tag = '　' + (s.label || ('区間' + (i + 1))) + '：';
-    const method = s.wiring + (s.wiring === '配管' && s.pipeType ? '（' + s.pipeType + '）' : '');
-    lines.push(tag + method + '　' + (s.length || 0) + 'm');
+    if (s.wiring === '配管' && s.pipeMode === 'manual') {
+      const vp = (s.pipes || []).filter(function(p) { return p.pipeType; });
+      lines.push(tag + '配管（個別指定）　' + (s.length || 0) + 'm');
+      vp.forEach(function(p) {
+        lines.push('　　・' + p.pipeType + '　' + (parseFloat(p.length) || 0) + 'm');
+      });
+    } else {
+      const method = s.wiring + (s.wiring === '配管' && s.pipeType ? '（' + s.pipeType + '）' : '');
+      lines.push(tag + method + '　' + (s.length || 0) + 'm');
+    }
   });
   return lines.join('\n');
 }
@@ -2343,6 +2551,8 @@ function normalizeLanSegments(r) {
         wiring: s.wiring || '',
         pipeType: s.pipeType || null,
         length: parseFloat(s.length) || 0,
+        pipeMode: s.pipeMode || 'auto',
+        pipes: Array.isArray(s.pipes) ? s.pipes : [],
       };
     });
   }
@@ -2618,6 +2828,8 @@ function generateReport() {
         wiring:   g.lan ? g.lan.wiring : null,
         pipeType: g.lan ? g.lan.pipeType : null,
         length:   g.lan ? (parseFloat(g.lan.length) || 0) : 0,
+        pipeMode: g.lan ? (g.lan.pipeMode || 'auto') : 'auto',
+        pipes:    g.lan && Array.isArray(g.lan.pipes) ? JSON.parse(JSON.stringify(g.lan.pipes)) : [],
       };
     }),
     wireSupport:  document.getElementById('wireSupport').value,
@@ -2913,8 +3125,16 @@ function buildLanSegmentsReadOnly(r) {
   }
   const total = segs.reduce(function(s, x) { return s + (parseFloat(x.length) || 0); }, 0);
   const rows = segs.map(function(s, i) {
+    const label = (s.label || ('区間' + (i + 1)));
+    if (s.wiring === '配管' && s.pipeMode === 'manual') {
+      const vp = (s.pipes || []).filter(function(p) { return p.pipeType; });
+      const sub = vp.map(function(p) {
+        return '<div style="font-size:11px;padding:1px 0 1px 12px;color:var(--text-dim);">・' + p.pipeType + '　' + (parseFloat(p.length) || 0) + 'm</div>';
+      }).join('');
+      return '<div style="font-size:12px;padding:4px 0;color:var(--text-dim);">' + label + '：配管（個別指定）　' + (s.length || 0) + 'm</div>' + sub;
+    }
     const method = (s.wiring || '') + (s.wiring === '配管' && s.pipeType ? '（' + s.pipeType + '）' : '');
-    return '<div style="font-size:12px;padding:4px 0;color:var(--text-dim);">' + (s.label || ('区間' + (i + 1))) + '：' + method + '　' + (s.length || 0) + 'm</div>';
+    return '<div style="font-size:12px;padding:4px 0;color:var(--text-dim);">' + label + '：' + method + '　' + (s.length || 0) + 'm</div>';
   }).join('');
   return '<div class="cedit-item">' +
     '<div class="cedit-item-label">🔌 LAN配線（合計' + total + 'm）</div>' +

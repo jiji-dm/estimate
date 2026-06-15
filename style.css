@@ -372,6 +372,46 @@ small.sub { color: var(--text-muted); font-size: 10px; display: block; margin-to
   font-family:'Noto Sans JP',sans-serif; padding:8px 4px; text-align:center; transition:all 0.18s;
 }
 .power-pipe-sub-btn.sel { border-color:var(--accent); color:var(--accent2); background:rgba(81,35,118,0.1); }
+
+/* 配管リスト（自動 / 個別 モード切替） */
+.conduit-block { margin-top:6px; }
+.conduit-mode-toggle { display:flex; gap:6px; margin-bottom:8px; }
+.conduit-mode-btn {
+  flex:1; background:var(--surface2); border:1.5px solid var(--border);
+  border-radius:8px; color:var(--text-dim); font-size:11px; font-weight:600;
+  font-family:'Noto Sans JP',sans-serif; padding:9px 4px; text-align:center;
+  cursor:pointer; transition:all 0.18s;
+}
+.conduit-mode-btn.sel { border-color:var(--accent); color:var(--accent2); background:rgba(81,35,118,0.1); }
+.conduit-list { display:flex; flex-direction:column; gap:10px; }
+.conduit-row {
+  background:var(--surface2); border:1.5px solid var(--border);
+  border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:8px;
+}
+.conduit-type-grid { display:flex; gap:5px; flex-wrap:wrap; }
+.conduit-type-btn {
+  flex:1; min-width:60px; background:var(--surface); border:1.5px solid var(--border);
+  border-radius:8px; color:var(--text-dim); font-size:11px; font-weight:500;
+  font-family:'Noto Sans JP',sans-serif; padding:8px 4px; text-align:center;
+  cursor:pointer; transition:all 0.18s;
+}
+.conduit-type-btn.sel { border-color:var(--accent); color:var(--accent2); background:rgba(81,35,118,0.1); }
+.conduit-len-ctrl { display:flex; align-items:center; justify-content:center; gap:6px; }
+.conduit-step { width:auto; min-width:42px; padding:0 8px; white-space:nowrap; font-size:13px; }
+.conduit-len-val { display:flex; align-items:baseline; gap:3px; }
+.conduit-len-val .cnt-input { font-size:20px; width:56px; text-align:center; }
+.conduit-len-unit { font-size:12px; color:var(--text-dim); }
+.conduit-add-btn {
+  margin-top:8px; width:100%; background:var(--surface2); border:1.5px dashed var(--accent);
+  border-radius:8px; color:var(--accent2); font-size:12px; font-weight:700;
+  font-family:'Noto Sans JP',sans-serif; padding:10px; cursor:pointer; transition:all 0.18s;
+}
+.conduit-add-btn:hover { background:rgba(81,35,118,0.08); }
+.conduit-del-btn {
+  align-self:flex-end; background:none; border:none; color:var(--text-dim);
+  font-size:11px; font-family:'Noto Sans JP',sans-serif; cursor:pointer; padding:2px 4px;
+}
+.conduit-del-btn:hover { color:#c0392b; }
 .date-section-header {
   display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
 }

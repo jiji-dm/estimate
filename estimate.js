@@ -9,6 +9,25 @@ const PIPE_RATES = {
   '露出': 100,
 };
 
+// 個別指定された配管リスト（[{pipeType,length}]）から明細行を生成し費用合計を返す。
+//   モールは箇所単価のため料金には含めず、件数だけ moor で返して呼び出し側で集計する。
+//   tag は明細ラベルに付ける区間/グループ名（例 '（区間1）'）。
+function buildManualPipeLines(pipes, tag) {
+  const out = { lines: [], total: 0, moor: 0 };
+  (pipes || []).forEach(function(p) {
+    if (!p || !p.pipeType) return;
+    const len = parseFloat(p.length) || 0;
+    if (p.pipeType === 'モール') { out.moor += 1; return; }
+    if (len <= 0) return;
+    const rate = PIPE_RATES[p.pipeType] || 0;
+    if (rate <= 0) return;
+    const fee = Math.round(len * rate);
+    out.lines.push({ label: `配管 ${p.pipeType}${tag}（${len}m × ${fmtYen(rate)}）`, val: fee });
+    out.total += fee;
+  });
+  return out;
+}
+
 // アーム取付方法ごとの単価。天吊ボルトと不明はトグル（数量なし）で別管理。
 const ARM_METHOD_PRICES = {
   wall: { 'ビス': 0, 'アーム': 10000, 'マグネット': 10000, 'ブラケット': 25000 },
@@ -85,6 +104,8 @@ function getLanSegments(r) {
         wiring: s.wiring || '',
         pipeType: s.pipeType || null,
         length: parseFloat(s.length) || 0,
+        pipeMode: s.pipeMode || 'auto',
+        pipes: Array.isArray(s.pipes) ? s.pipes : [],
       };
     });
   }
@@ -351,8 +372,15 @@ function calcEstimate(r) {
     // 区間ごとに配線方法別の料金を加算
     lanSegs.forEach(function(seg, i) {
       const len = parseFloat(seg.length) || 0;
-      if (len <= 0) return;
       const tag = lanSegs.length > 1 ? `（${seg.label || ('区間' + (i + 1))}）` : '';
+      // 配管・個別指定モード：複数配管をそれぞれ種別×長さで計上（LAN長さとは独立）
+      if (seg.wiring === '配管' && (seg.pipeMode === 'manual')) {
+        const mp = buildManualPipeLines(seg.pipes, tag);
+        mp.lines.forEach(function(ln) { lines.push({ label: 'LAN' + ln.label, val: ln.val }); });
+        total += mp.total;
+        return; // モールは下のモール集計で計上
+      }
+      if (len <= 0) return;
       if (seg.wiring === '露出') {
         const exposedFee = Math.round(len * PIPE_RATES['露出']);
         lines.push({ label: `LAN露出配線${tag}（${len}m × ${fmtYen(PIPE_RATES['露出'])}）`, val: exposedFee });
@@ -397,7 +425,13 @@ function calcEstimate(r) {
       }
     }
     // 条件C：配管
-    if (g.pipe === 'yes' && g.pipeType === 'モール') {
+    if (g.pipe === 'yes' && g.pipeMode === 'manual') {
+      // 個別指定モード：複数配管をそれぞれ種別×長さで計上（電源距離とは独立）
+      const mp = buildManualPipeLines(g.pipes, '');
+      mp.lines.forEach(function(ln) { lines.push({ label: '電源' + ln.label, val: ln.val }); });
+      total += mp.total;
+      // モールは下のモール集計で計上
+    } else if (g.pipe === 'yes' && g.pipeType === 'モール') {
       // モール配管は別途モール費で計上
     } else if (g.pipe === 'yes' && g.pipeType) {
       const rate = PIPE_RATES[g.pipeType] || 0;
@@ -514,8 +548,22 @@ function calcEstimate(r) {
   }
 
   // モール配管費（電源グループ + LAN区間 から集計）
-  let moorCount = powerGroups.filter(function(g) { return g.pipe === 'yes' && g.pipeType === 'モール'; }).length;
-  moorCount += lanSegs.filter(function(s) { return s.wiring === '配管' && s.pipeType === 'モール'; }).length;
+  //   個別指定モードでは pipes 配列内のモール本数を箇所数として数える
+  function countMoor(c, isPipeStage) {
+    if (!c) return 0;
+    if (c.pipeMode === 'manual') {
+      return (c.pipes || []).filter(function(p) { return p && p.pipeType === 'モール'; }).length;
+    }
+    return isPipeStage ? 1 : 0;
+  }
+  let moorCount = powerGroups.reduce(function(s, g) {
+    if (g.pipe !== 'yes') return s;
+    return s + countMoor(g, g.pipeType === 'モール');
+  }, 0);
+  moorCount += lanSegs.reduce(function(s, seg) {
+    if (seg.wiring !== '配管') return s;
+    return s + countMoor(seg, seg.pipeType === 'モール');
+  }, 0);
   if (moorCount > 0) {
     const moorFee = moorCount * 3000;
     lines.push({ label: `モール配管費（${moorCount}箇所 × ¥3,000）`, val: moorFee });
